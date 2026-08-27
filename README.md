@@ -4,22 +4,28 @@ A standalone version of the interactive story app — pick a story, play a
 character, and for "Echoes of a Second Life," reincarnate as a monster with
 levels, skills, traits, and a world that keeps moving without you.
 
-This version runs outside Claude entirely. It uses **Groq's free API tier**
-(no credit card required) instead of Claude, since it needs its own way to
-talk to an AI once it's not running inside Claude.ai anymore.
+This version runs outside Claude entirely. It uses **OpenRouter's free-tier
+models** instead of Claude, since it needs its own way to talk to an AI once
+it's not running inside Claude.ai anymore.
 
 ## 1. Get a free API key
 
-1. Go to <https://console.groq.com/keys>
-2. Sign in (free account, no card) and click "Create API Key"
-3. Copy the key — it starts with `gsk_...`
+1. Go to <https://openrouter.ai/keys>
+2. Sign in and click "Create Key"
+3. Copy the key — it starts with `sk-or-v1-...`
+
+**Free tier limits:** with $0 added to your OpenRouter account, free models
+(`:free` suffix) are capped at **50 requests/day, 20/minute**. If you ever
+add a one-time $10 credit to your account (a balance top-up, not a
+subscription — you don't have to spend it), that cap jumps to **1000 free
+requests/day**.
 
 ## 2. Run it locally (optional, to try before deploying)
 
 ```bash
 npm install
 cp .env.example .env
-# paste your key into .env as GROQ_API_KEY=...
+# paste your key into .env as OPENROUTER_API_KEY=...
 
 # terminal 1
 npm run dev:server
@@ -48,19 +54,19 @@ git push -u origin main
 3. Railway will detect Node automatically. It runs `npm install`, then
    `npm run build` (via the `build` script), then `npm start`
 4. Go to your service's **Variables** tab and add:
-   - `GROQ_API_KEY` = the key from step 1
-   - `GROQ_MODEL` is optional — leave it unset and the server will
-     automatically ask Groq which models your key can use and pick a good
-     one. Only set this if you want to force a specific model.
+   - `OPENROUTER_API_KEY` = the key from step 1
+   - `OPENROUTER_MODEL` is optional — leave it unset and the server will
+     automatically ask OpenRouter which free models are currently available
+     and pick a strong one (preferring larger models like Llama 3.3 70B or
+     DeepSeek R1). Only set this if you want to force a specific model.
 5. Once it deploys, Railway gives you a public URL — that's your app
 
 ## Notes
 
 - **Saves are per-browser.** Progress is stored in that browser's
   `localStorage`, not on the server — clearing browser data clears saves.
-- **Free tier limits.** Groq's free tier allows a limited number of
-  requests per minute. Plenty for personal play; if you hit the limit
-  you'll see an error and can just wait a bit.
+- **Free tier limits.** See the rate limits above — 50 free requests/day
+  is enough for a solid session but not unlimited daily play.
 - **Swapping providers.** All the AI-calling logic lives in
   `server/index.js`. To use a different provider, that's the only file
   that needs to change — the frontend just calls `POST /api/story` with
