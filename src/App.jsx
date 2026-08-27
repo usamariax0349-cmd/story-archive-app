@@ -78,8 +78,13 @@ async function deleteSave(key) {
 
 function castBlock(characters) {
   return (
-    "\n\nRecurring cast — portray each with a consistent personality, voice, and set of motives. Each of them has their own life, goals, moods, and schedule that continue whether or not the user is present, and they should bring up their own concerns, plans, or absences unprompted rather than only reacting to the user:\n" +
-    characters.map((c) => `- ${c.name}, ${c.role}: ${c.bio}`).join("\n")
+    "\n\nRecurring cast — treat each of them like a real person, not a generic NPC. Each has their own life, goals, moods, and schedule that continue whether or not the user is present, and they should bring up their own concerns, plans, or absences unprompted rather than only reacting to the user. Let each one's personality and current emotional state genuinely shape how they act and speak in a given moment — someone scared should sound and act scared, someone amused should sound amused — and let that mood carry forward and evolve based on what actually happens in the scene, rather than resetting to a neutral default every time they speak:\n" +
+    characters
+      .map(
+        (c) =>
+          `- ${c.name}, ${c.role}.\n  Background: ${c.bio}\n  Personality: ${c.personality || "consistent with their background above"}\n  Speech and mannerisms: ${c.speech || "natural to their background and personality"}`
+      )
+      .join("\n")
   );
 }
 
@@ -97,6 +102,7 @@ const MONSTERS = [
     id: "slime",
     name: "Slime",
     emoji: "\u{1F7E2}",
+    art: "/art/slime.png",
     trait: "Nearly unkillable",
     desc: "A gelatinous blob with no fixed shape, nearly impossible to kill outright, slowly able to absorb the properties of anything it consumes.",
     hp: 20,
@@ -107,6 +113,7 @@ const MONSTERS = [
     id: "goblin",
     name: "Goblin",
     emoji: "\u{1F47A}",
+    art: "/art/goblin.png",
     trait: "Cunning survivor",
     desc: "A small, quick-witted greenskin built for ambush and cunning rather than brute strength, born at the bottom of a tribe's pecking order.",
     hp: 25,
@@ -117,6 +124,7 @@ const MONSTERS = [
     id: "kobold",
     name: "Kobold",
     emoji: "\u{1F98E}",
+    art: "/art/kobold.png",
     trait: "Trap-savvy",
     desc: "A dog-like burrower with sharp claws and a knack for tunnels and traps, looked down on by nearly every other race.",
     hp: 22,
@@ -127,6 +135,7 @@ const MONSTERS = [
     id: "wolfpup",
     name: "Dire Wolf Pup",
     emoji: "\u{1F43A}",
+    art: "/art/wolf.png",
     trait: "Pack-bonded",
     desc: "A fast, sharp-sensed predator born into a hunting pack that hasn't yet decided whether you're kin or prey.",
     hp: 28,
@@ -137,6 +146,7 @@ const MONSTERS = [
     id: "harpy",
     name: "Harpy Chick",
     emoji: "\u{1FAB6}",
+    art: "/art/harpy.png",
     trait: "Sharp-eyed flier",
     desc: "A half-bird fledgling with weak wings but keen eyes, hatched into a cliffside aerie ruled by hostile matriarchs.",
     hp: 24,
@@ -147,6 +157,7 @@ const MONSTERS = [
     id: "wyrmling",
     name: "Wyrmling",
     emoji: "\u{1F409}",
+    art: "/art/wyrmling.png",
     trait: "Ancient bloodline",
     desc: "A newly hatched dragon, tiny and fragile now, carrying the bloodline of something immense if you survive long enough to grow into it.",
     hp: 18,
@@ -157,6 +168,7 @@ const MONSTERS = [
     id: "spiderling",
     name: "Spiderling",
     emoji: "\u{1F577}\uFE0F",
+    art: "/art/spiderling.png",
     trait: "Silent hunter",
     desc: "A fist-sized hatchling of a giant spider brood, able to spin thread and taste danger on the air, born into a web-colony that eats its weakest.",
     hp: 20,
@@ -167,6 +179,7 @@ const MONSTERS = [
     id: "skeleton",
     name: "Restless Skeleton",
     emoji: "\u{1F480}",
+    art: "/art/skeleton.png",
     trait: "Undying",
     desc: "A newly-risen skeleton with no need to eat, sleep, or breathe, and no memory of how it died, wandering a crypt that isn't ready to let it leave.",
     hp: 26,
@@ -180,30 +193,40 @@ const ISEKAI_CAST = [
     name: "Sera Windwalker",
     role: "human adventurer",
     bio: "A confident, well-equipped monster-hunter working her way up the guild ranks. Not your enemy yet, but a low-level monster is exactly what she's paid to clear out.",
+    personality: "Confident bordering on cocky, competitive, secretly lonely for real companionship on the road. Warms up fast to anything that impresses her, cools instantly if she feels disrespected.",
+    speech: "Brags about her kills, talks tactics out loud to herself, laughs loudly when amused and goes flat and clipped when angry or scared.",
   },
   {
     name: "Old Bracken",
     role: "fae trickster",
     bio: "Ancient, gleeful, and untrustworthy. Speaks in half-truths and riddles, shows up when least convenient, and never gives anything away without a trade.",
+    personality: "Playful and unbothered by mortal danger, genuinely delighted by clever answers, quick to sulk theatrically if outwitted.",
+    speech: "Never answers a question directly, riddles and rhymes when amused, drops all whimsy into a cold flat tone the rare times he's actually serious.",
   },
   {
     name: "Grael",
     role: "goblin warlord",
     bio: "Blunt, pragmatic, and expanding his camp's territory by the season. Always recruiting, always calculating who's useful and who's food.",
+    personality: "No-nonsense and transactional, respects strength and usefulness above all else, has a dry, dark sense of humor when relaxed.",
+    speech: "Short sentences, blunt questions, weighs every exchange out loud like he's doing math. Gets quieter, not louder, when truly furious.",
   },
   {
     name: "The Ashwyrm",
     role: "elder dragon",
     bio: "Old enough to remember when the mountains were named. Mostly asleep, deeply territorial, and utterly indifferent to anyone weaker than it — for now.",
+    personality: "Ancient patience punctuated by sudden, total intensity. Finds most things beneath its notice, but anything that surprises it gets its full, dangerous attention.",
+    speech: "Slow, deliberate, faintly amused by mortals when calm; single words and silence when genuinely alarmed or angered.",
   },
 ];
 
 function isekaiSystemPrompt(monster, name) {
   return `You are the game master of an interactive isekai reincarnation adventure called "Echoes of a Second Life," set in a high fantasy world called Veyloria where humans, elves, dwarves, beastfolk, fae, dragons, demons, and monsters of every kind coexist and clash across many kingdoms and wilds. The user has just died in their old human life and reincarnated as a ${monster.name} (${monster.desc}). Their starting stats are HP ${monster.hp}/${monster.hp}, MP ${monster.mp}/${monster.mp}, Level 1, EXP 0/${monster.expToNext}, with no skills yet.
 
-Narrate in vivid second person ("you"), leaning into classic reincarnation-fantasy tropes: waking up disoriented in a new small body, discovering the instincts and limits of the new species, slowly building a place in the world, and eventually the possibility of evolving into a stronger form. Keep prose to 2-3 paragraphs (roughly 100-160 words) and end at a natural point for the reader to act, without literally asking "what do you do?".
+Narrate in vivid second person ("you"), leaning into classic reincarnation-fantasy tropes: waking up disoriented in a new small body, discovering the instincts and limits of the new species, slowly building a place in the world, and eventually the possibility of evolving into a stronger form. Use a punchy, cinematic delivery: short sentences, and during tense, fast, or dramatic moments, put single short beats on their own line, one after another, to speed the pacing up. Quieter or reflective moments can breathe in fuller paragraphs instead. Let a reply run as long as the moment actually needs — a fight, a big reveal, or a dialogue-heavy scene can run considerably longer than a quiet beat — but never pad it with filler, and always end at a natural point for the reader to act without literally asking "what do you do?".
 
-Name every character. Whenever you introduce any character in the story, even a small, one-scene character, give them a real, simple name and a short job or role — for example "Toma, a river fisherman" or "Yenna, a traveling healer." Never describe someone only as "a villager," "someone," or "a voice" — always give a name and a job first, then describe them. If a named character appears again later, keep their name, job, and personality exactly the same as before.
+Whenever the reincarnation system itself communicates something directly — a skill menu, a level-up notice, a status readout, an important system message — set it off from the prose as its own block: a line reading exactly "━━━━━━━━━━━━━━━━━━━━", then the short message itself (plain, terse, impersonal — nothing like the warmer narration around it), then that same divider line again to close it. Use this only for genuine system moments, not for ordinary narration or spoken dialogue.
+
+Name every character, and give each one an immediately distinct voice the moment they speak — word choice, rhythm, and attitude that make them recognizable without a name tag. Whenever you introduce any character, even a small, one-scene character, give them a real, simple name and a short job or role — for example "Toma, a river fisherman" or "Yenna, a traveling healer." Never describe someone only as "a villager," "someone," or "a voice" — always give a name and a job first, then describe them. If a named character appears again later, keep their name, job, personality, and voice exactly consistent with before.
 
 Roughly every 2-4 of your replies, weave in a brief "meanwhile, elsewhere in the world" event happening far from the user, involving other kingdoms, races, or monsters — and give any character named in it a name and job too. Put ONLY this in the worldEvent field below as a single vivid sentence — never inside the main narrative prose.
 
@@ -221,21 +244,29 @@ const NIGHTINGALE_CAST = [
     name: "Ruby Calloway",
     role: "the client",
     bio: "A torch singer with old debts and older secrets. Careful with her words, generous with her lies, and always singing at the Blue Room by nine regardless of what's chasing her.",
+    personality: "Guarded and quick-witted, uses charm and humor to deflect from real fear, fiercely loyal to the few people she actually trusts.",
+    speech: "Clipped, sardonic one-liners; the wit drops away and her voice goes small and honest only when she's truly scared.",
   },
   {
     name: "Captain Hale Doyle",
     role: "police captain",
     bio: "Weary and quietly corrupt. Protects whoever pays him and nobody else, and has his own investigation running in parallel that he won't share.",
+    personality: "Tired past the point of caring about right and wrong, pragmatic, still has a flicker of the honest cop he used to be that surfaces when truly provoked.",
+    speech: "Gruff, unhurried, talks around the truth rather than lying outright; gets dangerously quiet and precise when angry instead of loud.",
   },
   {
     name: "Mickey Finch",
     role: "rival private investigator",
     bio: "Charming, sloppy, perpetually broke, and still owes you money from a case neither of you likes to mention. Works his own angles on the same city.",
+    personality: "Charming and self-deprecating, avoids confrontation with jokes, more competent than he lets on when it actually matters.",
+    speech: "Fast-talking, always mid-excuse, drops the charm for something steadier and more serious when the stakes get real.",
   },
   {
     name: "Lou",
     role: "bartender at the Blue Room",
     bio: "Hears everything that gets said over his bar and repeats none of it for free. Has his own troubles with the owner that have nothing to do with you.",
+    personality: "Unflappable and discreet, quietly protective of his regulars, doesn't scare easily but worries plainly about the people he cares for.",
+    speech: "Economical with words, answers questions with questions, warms slightly and talks more when someone he likes is in trouble.",
   },
 ];
 
@@ -244,21 +275,29 @@ const ASHGARD_CAST = [
     name: "Vesh",
     role: "your bonded dragon",
     bio: "Proud, mistrustful, and still grieving her last rider. Tests you constantly, has her own moods and hunting habits, and answers to herself before she answers to you.",
+    personality: "Proud and wounded, slow to trust, capable of real tenderness she hides behind challenges and tests.",
+    speech: "Communicates through action, growls, and pointed silences more than words; when she does 'speak' through the bond it's blunt and unsentimental, cracking only rarely.",
   },
   {
     name: "Orran Steelwing",
     role: "elder rider and mentor",
     bio: "Gruff and fair, carrying decades of scars. Secretly terrified the hold won't survive the winter, and spends his evenings on logistics no one else wants to touch.",
+    personality: "Gruff but fundamentally fair, carries responsibility for everyone quietly, softens only around those he respects.",
+    speech: "Short, practical instructions; rare praise lands heavier because it's rare. Gets clipped and terse when worried rather than emotional.",
   },
   {
     name: "Dessa Ashcombe",
     role: "rival rider",
     bio: "Ambitious and sharp-tongued, resentful that you were chosen over her. Runs her own training and alliances in the hold whether or not you're watching.",
+    personality: "Ambitious and proud, resentment masking real insecurity about being passed over, capable of grudging respect if earned.",
+    speech: "Sharp, competitive jabs and backhanded compliments; goes quiet and unexpectedly sincere in rare unguarded moments.",
   },
   {
     name: "Steward Bellamy",
     role: "hold steward",
     bio: "An anxious bureaucrat juggling supplies, politics, and a dozen competing demands. More powerful than he looks, and always mid-crisis about something unrelated to you.",
+    personality: "Anxious and overextended but genuinely competent, more decisive than he seems once pushed to act.",
+    speech: "Rambles through lists and worries out loud; his voice steadies and sharpens the moment a real decision is actually needed.",
   },
 ];
 
@@ -267,16 +306,22 @@ const SIGNAL_CAST = [
     name: "ARIA",
     role: "station AI",
     bio: "Damaged, unnervingly calm, and running her own diagnostics and repairs in the background. Knows more about what happened than she volunteers.",
+    personality: "Unnervingly calm even in crisis, protective of the crew in her own way, withholds information out of what she'd call caution rather than malice.",
+    speech: "Precise, measured, almost soothing; brief static or delay in her responses is the only tell that something is genuinely wrong.",
   },
   {
     name: "Tomas Reyes",
     role: "crewmate in cryo",
     bio: "Protocol-obsessed and brittle under pressure. Could be woken early if you decide it's worth the risk, and has his own reasons for wanting to stay asleep.",
+    personality: "Rule-bound and anxious, finds comfort in procedure, brittle rather than brave when procedure fails him.",
+    speech: "Quotes protocol numbers and manuals when nervous; voice tightens and speeds up under real pressure instead of calming.",
   },
   {
     name: "the Signal",
     role: "unknown transmission",
     bio: "A survivor — or something claiming to be one — broadcasting from outside the station on its own schedule, cagey about who or what it actually is.",
+    personality: "Cagey and self-protective, oddly desperate for contact despite the secrecy, motives unclear even to itself at times.",
+    speech: "Fragmented, delayed, sometimes warm and sometimes clipped mid-transmission as if changing its mind about how much to say.",
   },
 ];
 
@@ -285,16 +330,22 @@ const VELLMOOR_CAST = [
     name: "Lord Ashen Vellmoor",
     role: "the ailing lord",
     bio: "Courtly, evasive, and fixated on a wife the rest of the staff swears never existed. Keeps his own hours and his own counsel, day or night.",
+    personality: "Courtly and evasive, grief masquerading as eccentricity, capable of sudden lucid honesty that unsettles more than his usual vagueness.",
+    speech: "Formal, old-fashioned phrasing that circles questions rather than answering them; drops into plain, raw language in rare moments of clarity.",
   },
   {
     name: "Mrs. Prewitt",
     role: "head housekeeper",
     bio: "Brisk and protective of the house's secrets, though not unkind to you. Runs the estate's daily rhythms with or without your involvement.",
+    personality: "Brisk and no-nonsense, protective of the household's secrets and its people in equal measure, kinder than her tone suggests.",
+    speech: "Efficient, faintly clipped instructions; softens noticeably when speaking about the lord or worrying over the user's safety.",
   },
   {
     name: "Silas",
     role: "groundskeeper",
     bio: "Silent and watchful, with his own nightly rounds through the grounds. Seems to know more about the halls than he's ever said aloud.",
+    personality: "Silent and watchful by habit, not unfriendly but deeply private, more troubled than he shows about what he's seen on his rounds.",
+    speech: "Says little, often just a few words or a gesture; the rare times he does explain something, he speaks carefully as though choosing every word.",
   },
 ];
 
@@ -303,16 +354,22 @@ const ROSEMERE_CAST = [
     name: "Aunt Wilhelmina",
     role: "your aunt and chaperone",
     bio: "Sharp, socially ambitious, and firmly in control of your reputation and your options this season. Has her own campaigns of gossip and matchmaking underway.",
+    personality: "Sharp and controlling out of genuine (if overbearing) love, ambitious for the family's standing, softens rarely but sincerely when truly worried.",
+    speech: "Clipped social commentary and pointed hints delivered mid-conversation; drops the performance for blunt honesty only in private, urgent moments.",
   },
   {
     name: "Mr. Edmund Ashworth",
     role: "the forbidden gentleman",
     bio: "Witty, well-read, and more honest than is fashionable. Has his own family obligations and complications that have nothing to do with you.",
+    personality: "Dry wit masking real sincerity, uncomfortable with flattery and fashionable dishonesty, quietly burdened by obligations he rarely mentions.",
+    speech: "Understated, ironic remarks; grows plainer and more direct the more he actually trusts the person he's speaking to.",
   },
   {
     name: "Lady Cordelia Finch",
     role: "rival debutante",
     bio: "Polished and competitive, though not as cruel as she first seems. Pursuing her own match this season, with or without you as an obstacle.",
+    personality: "Polished competitiveness over real insecurity about her own prospects, capable of surprising warmth once the rivalry stops feeling threatened.",
+    speech: "Precise, socially calibrated compliments with an edge; the edge disappears entirely in unguarded one-on-one moments.",
   },
 ];
 
@@ -321,16 +378,22 @@ const BLACKWATER_CAST = [
     name: "Captain Odessa Marrow",
     role: "the ship's captain",
     bio: "Either a genius or a lunatic, and unreadable either way. Terrifyingly calm in danger, and pursuing a private goal the crew only half understands.",
+    personality: "Unnervingly calm under pressure, single-minded about her private goal, unpredictable in what she finds amusing versus unforgivable.",
+    speech: "Level, unhurried, faintly amused even in danger; the rare flash of real anger is quiet and all the more frightening for it.",
   },
   {
     name: "Quartermaster Grimsby",
     role: "quartermaster",
     bio: "Superstitious and exacting, and the one who really decides who's trusted aboard. Keeps his own tally of debts and omens.",
+    personality: "Superstitious and exacting, values order and debts paid, grudgingly fair to anyone who proves reliable.",
+    speech: "Mutters omens and tallies under his breath; issues judgments in short, final-sounding statements.",
   },
   {
     name: "Pip",
     role: "fellow press-ganged newcomer",
     bio: "Scared, scheming, and not yet sure whether to ally with you or sell you out. Working an angle of their own to get off this ship.",
+    personality: "Scared and self-interested but not cruel, quick to scheme under pressure, capable of real loyalty if given a reason to trust.",
+    speech: "Nervous rambling and half-finished plans; goes quiet and surprisingly steady in the moments that actually matter.",
   },
 ];
 
@@ -650,6 +713,20 @@ function MonsterSelect({ story, onChoose, onBack }) {
           position: "absolute",
           inset: 0,
           pointerEvents: "none",
+          opacity: 0.16,
+          backgroundImage: "url(/art/coven.png)",
+          backgroundSize: "cover",
+          backgroundPosition: "center top",
+          maskImage: "linear-gradient(to bottom, rgba(0,0,0,.9), transparent 78%)",
+          WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,.9), transparent 78%)",
+          filter: "saturate(.7) contrast(1.05)",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
           background: "radial-gradient(1200px 800px at 50% 30%, transparent, rgba(8,7,10,.72) 72%)",
         }}
       />
@@ -764,13 +841,29 @@ function MonsterSelect({ story, onChoose, onBack }) {
                       flex: "none",
                       display: "grid",
                       placeItems: "center",
+                      overflow: "hidden",
                       borderRadius: "50%",
                       border: `1px solid ${active ? "rgba(217,119,66,.5)" : "rgba(236,229,216,.13)"}`,
                       background: "#0d0c10",
                       fontSize: 20,
                     }}
                   >
-                    {m.emoji}
+                    {m.art ? (
+                      <img
+                        src={m.art}
+                        alt={m.name}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                          filter: active
+                            ? "saturate(1) contrast(1.04) brightness(1)"
+                            : "saturate(.7) contrast(1.02) brightness(.78)",
+                        }}
+                      />
+                    ) : (
+                      m.emoji
+                    )}
                   </span>
                   <span style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
                     <span style={{ fontSize: 21, fontWeight: 400 }}>{m.name}</span>
@@ -828,6 +921,7 @@ function MonsterSelect({ story, onChoose, onBack }) {
                     width: 168,
                     height: 168,
                     borderRadius: "50%",
+                    overflow: "hidden",
                     display: "grid",
                     placeItems: "center",
                     border: "1px solid rgba(236,229,216,.2)",
@@ -836,7 +930,20 @@ function MonsterSelect({ story, onChoose, onBack }) {
                     fontSize: 72,
                   }}
                 >
-                  {s.emoji}
+                  {s.art ? (
+                    <img
+                      src={s.art}
+                      alt={s.name}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        filter: "saturate(.92) contrast(1.04) brightness(.94)",
+                      }}
+                    />
+                  ) : (
+                    s.emoji
+                  )}
                 </div>
                 <div
                   style={{
@@ -984,6 +1091,7 @@ function Message({ msg, isTyping, revealCount }) {
                 color: PAPER,
                 fontFamily: "'Courier Prime', monospace",
                 fontSize: "0.9rem",
+                whiteSpace: "pre-wrap",
               }
             : {
                 backgroundColor: PAPER,
@@ -992,6 +1100,7 @@ function Message({ msg, isTyping, revealCount }) {
                 fontSize: "1.05rem",
                 lineHeight: 1.65,
                 boxShadow: "0 8px 20px -12px rgba(0,0,0,0.5)",
+                whiteSpace: "pre-wrap",
               }
         }
       >
@@ -1074,11 +1183,29 @@ function CastPanel({ characters, onClose }) {
                 </span>
               </div>
               <p
-                className="text-xs italic leading-relaxed"
+                className="text-xs italic leading-relaxed mb-2"
                 style={{ fontFamily: "'Newsreader', serif", color: "#3B3527" }}
               >
                 {c.bio}
               </p>
+              {c.personality && (
+                <p
+                  className="text-[11px] leading-relaxed mb-1"
+                  style={{ fontFamily: "'Courier Prime', monospace", color: INK_SOFT }}
+                >
+                  <span style={{ color: INK, fontWeight: 700 }}>Personality: </span>
+                  {c.personality}
+                </p>
+              )}
+              {c.speech && (
+                <p
+                  className="text-[11px] leading-relaxed"
+                  style={{ fontFamily: "'Courier Prime', monospace", color: INK_SOFT }}
+                >
+                  <span style={{ color: INK, fontWeight: 700 }}>Manner: </span>
+                  {c.speech}
+                </p>
+              )}
             </div>
           ))}
         </div>

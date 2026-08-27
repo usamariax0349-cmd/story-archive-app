@@ -101,7 +101,7 @@ app.post("/api/story", async (req, res) => {
         body: JSON.stringify({
           model: modelId,
           messages: chatMessages,
-          max_tokens: 700,
+          max_tokens: 1000,
           temperature: 1,
         }),
       });
