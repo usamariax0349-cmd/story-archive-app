@@ -49,7 +49,9 @@ git push -u origin main
    `npm run build` (via the `build` script), then `npm start`
 4. Go to your service's **Variables** tab and add:
    - `GROQ_API_KEY` = the key from step 1
-   - (optional) `GROQ_MODEL` = `llama-3.3-70b-versatile` (or another Groq model)
+   - `GROQ_MODEL` is optional — leave it unset and the server will
+     automatically ask Groq which models your key can use and pick a good
+     one. Only set this if you want to force a specific model.
 5. Once it deploys, Railway gives you a public URL — that's your app
 
 ## Notes
