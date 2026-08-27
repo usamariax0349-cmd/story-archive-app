@@ -1079,12 +1079,14 @@ function WorldEventCard({ text }) {
   );
 }
 
-function Message({ msg, isTyping, revealCount }) {
+function Message({ msg, isTyping, revealCount, onSkip }) {
   const isUser = msg.role === "user";
   const shown = isTyping ? msg.display.slice(0, revealCount) : msg.display;
+  const canSkip = isTyping && revealCount < msg.display.length;
   return (
     <div className={`w-full flex ${isUser ? "justify-end" : "justify-start"} mb-4`}>
       <div
+        onClick={canSkip ? onSkip : undefined}
         className="max-w-[85%] sm:max-w-[70%] rounded-sm px-4 py-3"
         style={
           isUser
@@ -1103,11 +1105,12 @@ function Message({ msg, isTyping, revealCount }) {
                 lineHeight: 1.65,
                 boxShadow: "0 8px 20px -12px rgba(0,0,0,0.5)",
                 whiteSpace: "pre-wrap",
+                cursor: canSkip ? "pointer" : "default",
               }
         }
       >
         {shown}
-        {isTyping && revealCount < msg.display.length && (
+        {canSkip && (
           <span className="inline-block ml-0.5 animate-pulse" style={{ color: INK }}>
             {"\u258C"}
           </span>
@@ -1534,16 +1537,22 @@ function StoryView({ story, monster, characterName, onBack, resumeData }) {
       clearInterval(timerRef.current);
       setRevealCount(0);
       const full = last.display;
+      // Scale the reveal speed to length so a short reply and a long reply
+      // both finish animating in roughly the same amount of time.
+      const TARGET_DURATION_MS = 2500;
+      const TICK_MS = 12;
+      const ticks = Math.max(1, TARGET_DURATION_MS / TICK_MS);
+      const perTick = Math.max(3, Math.ceil(full.length / ticks));
       timerRef.current = setInterval(() => {
         setRevealCount((c) => {
-          const next = c + 3;
+          const next = c + perTick;
           if (next >= full.length) {
             clearInterval(timerRef.current);
             return full.length;
           }
           return next;
         });
-      }, 12);
+      }, TICK_MS);
     }
     skipNextTypewriterRef.current = false;
     return () => clearInterval(timerRef.current);
@@ -1758,6 +1767,10 @@ function StoryView({ story, monster, characterName, onBack, resumeData }) {
                 msg={msg}
                 isTyping={i === messages.length - 1 && msg.role === "assistant"}
                 revealCount={revealCount}
+                onSkip={() => {
+                  clearInterval(timerRef.current);
+                  setRevealCount(msg.display.length);
+                }}
               />
             )
           )}
