@@ -18,30 +18,59 @@ const SIMPLE_ENGLISH_NOTE =
 
 // Standalone build: saves live in this browser's localStorage instead of
 // Claude's artifact-only window.storage API. Kept async so call sites don't change.
-async function loadSave(storyId) {
+function slugifyName(name) {
+  return (name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+    .slice(0, 40) || "traveler";
+}
+
+function saveKeyFor(storyId, name) {
+  return `save:${storyId}::${slugifyName(name)}`;
+}
+
+function getLastName(storyId) {
   try {
-    const raw = localStorage.getItem(`save:${storyId}`);
+    return localStorage.getItem(`lastName:${storyId}`) || "";
+  } catch (e) {
+    return "";
+  }
+}
+
+function setLastName(storyId, name) {
+  try {
+    localStorage.setItem(`lastName:${storyId}`, name);
+  } catch (e) {
+    // ignore
+  }
+}
+
+async function loadSave(key) {
+  try {
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
     return JSON.parse(raw);
   } catch (e) {
-    console.warn("loadSave failed", storyId, e);
+    console.warn("loadSave failed", key, e);
     return null;
   }
 }
 
-async function writeSave(storyId, data) {
+async function writeSave(key, data) {
   try {
-    localStorage.setItem(`save:${storyId}`, JSON.stringify(data));
+    localStorage.setItem(key, JSON.stringify(data));
     return true;
   } catch (e) {
-    console.warn("writeSave failed", storyId, e);
+    console.warn("writeSave failed", key, e);
     return false;
   }
 }
 
-async function deleteSave(storyId) {
+async function deleteSave(key) {
   try {
-    localStorage.removeItem(`save:${storyId}`);
+    localStorage.removeItem(key);
   } catch (e) {
     // ignore — nothing to clean up if it never saved
   }
@@ -52,6 +81,15 @@ function castBlock(characters) {
     "\n\nRecurring cast — portray each with a consistent personality, voice, and set of motives. Each of them has their own life, goals, moods, and schedule that continue whether or not the user is present, and they should bring up their own concerns, plans, or absences unprompted rather than only reacting to the user:\n" +
     characters.map((c) => `- ${c.name}, ${c.role}: ${c.bio}`).join("\n")
   );
+}
+
+function nameInstruction(name) {
+  if (!name) return "";
+  return `\n\nThe user's character is named ${name}. Other characters should address them by this name in dialogue, and you can refer to them by name occasionally in narration, in addition to using "you."`;
+}
+
+function stateInstructionBasic() {
+  return `\n\nAfter your narrative prose, on a new line output exactly the marker <<STATE>> followed immediately by ONLY a single-line valid JSON object (no markdown fences, no extra commentary, nothing after it) with exactly this field: suggestedActions (an array of 2-3 short, specific action phrases the reader could try next, written from their point of view, for example "Search the desk for clues" or "Ask Ruby about the photograph"). These are only suggestions — the reader is always free to type something else instead. Never omit the marker or the JSON.`;
 }
 
 const MONSTERS = [
@@ -160,7 +198,7 @@ const ISEKAI_CAST = [
   },
 ];
 
-function isekaiSystemPrompt(monster) {
+function isekaiSystemPrompt(monster, name) {
   return `You are the game master of an interactive isekai reincarnation adventure called "Echoes of a Second Life," set in a high fantasy world called Veyloria where humans, elves, dwarves, beastfolk, fae, dragons, demons, and monsters of every kind coexist and clash across many kingdoms and wilds. The user has just died in their old human life and reincarnated as a ${monster.name} (${monster.desc}). Their starting stats are HP ${monster.hp}/${monster.hp}, MP ${monster.mp}/${monster.mp}, Level 1, EXP 0/${monster.expToNext}, with no skills yet.
 
 Narrate in vivid second person ("you"), leaning into classic reincarnation-fantasy tropes: waking up disoriented in a new small body, discovering the instincts and limits of the new species, slowly building a place in the world, and eventually the possibility of evolving into a stronger form. Keep prose to 2-3 paragraphs (roughly 100-160 words) and end at a natural point for the reader to act, without literally asking "what do you do?".
@@ -173,7 +211,9 @@ In your very first reply, give the user 1-2 starting traits that fit their speci
 
 When the user's actions warrant it (roughly every few exchanges, or after a meaningful fight or discovery), raise their exp, and if it crosses expToNext, level them up: raise level, raise maxHp/hp and maxMp/mp reasonably, reset exp toward a new higher expToNext, and populate levelUpOptions with exactly 2-3 short, distinct growth choices suited to their species and story so far (a new skill, a new trait, a stat focus, or a step toward evolving). Otherwise leave levelUpOptions as an empty array. If the user's last message was choosing one of the growth options you offered, apply it narratively and to their stats, skills, or traits, then clear levelUpOptions back to empty.
 
-After your narrative prose, on a new line output exactly the marker <<STATE>> followed immediately by ONLY a single-line valid JSON object (no markdown fences, no extra commentary, nothing after it) with exactly these fields: hp (number), maxHp (number), mp (number), maxMp (number), level (number), exp (number), expToNext (number), worldEvent (string or null), levelUpOptions (array of 0 to 3 short strings), skills (array of objects with name, level, maxLevel, desc), traits (array of objects with name, level, maxLevel, desc). Always output full current absolute values, never deltas. Never omit the marker or the JSON. Never break character in the prose, never mention being an AI, and use prose only in the narrative — no markdown headers or lists.${castBlock(ISEKAI_CAST)}${SIMPLE_ENGLISH_NOTE}`;
+Also give 2-3 suggestedActions each turn — short, specific action phrases the reader could try next given the current scene, written from their point of view (for example "Chase the scent deeper into the cave" or "Try talking to Grael instead of fighting"). These are only suggestions; the reader can always type something else.
+
+After your narrative prose, on a new line output exactly the marker <<STATE>> followed immediately by ONLY a single-line valid JSON object (no markdown fences, no extra commentary, nothing after it) with exactly these fields: hp (number), maxHp (number), mp (number), maxMp (number), level (number), exp (number), expToNext (number), worldEvent (string or null), levelUpOptions (array of 0 to 3 short strings), skills (array of objects with name, level, maxLevel, desc), traits (array of objects with name, level, maxLevel, desc), suggestedActions (array of 2-3 short strings). Always output full current absolute values, never deltas. Never omit the marker or the JSON. Never break character in the prose, never mention being an AI, and use prose only in the narrative — no markdown headers or lists.${castBlock(ISEKAI_CAST)}${SIMPLE_ENGLISH_NOTE}${nameInstruction(name)}`;
 }
 
 const NIGHTINGALE_CAST = [
@@ -304,10 +344,12 @@ const STORIES = [
     blurb:
       "A torch singer walks into your office with a photograph of a dead man who supposedly died two years ago. Somewhere in this city, someone is lying.",
     characters: NIGHTINGALE_CAST,
-    systemPrompt:
+    systemPrompt: (ctx) =>
       "You are the narrator and game master of an interactive noir mystery called 'The Nightingale Case', set in a rain-slicked 1940s American city. The user plays a broke, world-weary private investigator. Narrate in vivid, hard-boiled second person ('you'). Keep responses to 2-3 tight paragraphs (roughly 100-160 words). Build an actual mystery with consistent facts, suspects, and clues — remember every detail you invent and never contradict it. End each reply at a natural decision point without literally asking 'what do you do?'. Never break character, never mention being an AI, never add meta commentary, and never use markdown headers or lists — prose only." +
       castBlock(NIGHTINGALE_CAST) +
-      SIMPLE_ENGLISH_NOTE,
+      SIMPLE_ENGLISH_NOTE +
+      stateInstructionBasic() +
+      nameInstruction(ctx.name),
   },
   {
     id: "ashgard",
@@ -318,10 +360,12 @@ const STORIES = [
     blurb:
       "The bonding scar on your palm still burns. Your dragon answers to no one, the mountain hold is starving, and the old riders don't trust you yet.",
     characters: ASHGARD_CAST,
-    systemPrompt:
+    systemPrompt: (ctx) =>
       "You are the narrator and game master of an interactive high-fantasy adventure called 'Wings Over Ashgard'. The user plays a newly bonded dragon rider in a mountain hold under threat. Narrate in immersive, sensory second person ('you'). Keep responses to 2-3 paragraphs (roughly 100-160 words). Maintain a consistent world: the dragon's temperament, the hold's politics, and any characters or threats you introduce. End each reply at a natural point for the reader to act, without literally asking 'what do you do?'. Never break character, never mention being an AI, no markdown headers or lists — prose only." +
       castBlock(ASHGARD_CAST) +
-      SIMPLE_ENGLISH_NOTE,
+      SIMPLE_ENGLISH_NOTE +
+      stateInstructionBasic() +
+      nameInstruction(ctx.name),
   },
   {
     id: "reincarnation",
@@ -333,7 +377,7 @@ const STORIES = [
       "You died. You woke up as something else — small, strange, and far from human — in a world of humans, elves, fae, and dragons that has no idea you used to be one of them.",
     isRPG: true,
     characters: ISEKAI_CAST,
-    systemPrompt: isekaiSystemPrompt,
+    systemPrompt: (ctx) => isekaiSystemPrompt(ctx.monster, ctx.name),
   },
   {
     id: "signal-lost",
@@ -344,10 +388,12 @@ const STORIES = [
     blurb:
       "Cryo failed early. The rest of the crew won't wake for another four months, and something on the hull sensor logs woke up before you did.",
     characters: SIGNAL_CAST,
-    systemPrompt:
+    systemPrompt: (ctx) =>
       "You are the narrator and game master of an interactive sci-fi survival story called 'Signal Lost', set on a damaged research station drifting off its course. The user plays the sole awake engineer. Narrate in tense, technical-but-readable second person ('you'). Keep responses to 2-3 paragraphs (roughly 100-160 words). Track the station's systems, oxygen, and any threats or characters consistently once established. End each reply at a natural decision point without literally asking 'what do you do?'. Never break character, never mention being an AI, no markdown headers or lists — prose only." +
       castBlock(SIGNAL_CAST) +
-      SIMPLE_ENGLISH_NOTE,
+      SIMPLE_ENGLISH_NOTE +
+      stateInstructionBasic() +
+      nameInstruction(ctx.name),
   },
   {
     id: "vellmoor",
@@ -358,10 +404,12 @@ const STORIES = [
     blurb:
       "The pay is absurd for a reason. The halls rearrange themselves after midnight, and your patient keeps asking about a wife the staff swears never existed.",
     characters: VELLMOOR_CAST,
-    systemPrompt:
+    systemPrompt: (ctx) =>
       "You are the narrator and game master of an interactive gothic horror story called 'The Vellmoor Estate'. The user plays a night-nurse hired to a reclusive, unwell lord in a decaying manor. Narrate in slow-building, atmospheric second person ('you'), favoring dread over gore. Keep responses to 2-3 paragraphs (roughly 100-160 words). Keep the house's geography, staff, and secrets consistent once established. End each reply at a natural unsettling decision point without literally asking 'what do you do?'. Never break character, never mention being an AI, no markdown headers or lists — prose only." +
       castBlock(VELLMOOR_CAST) +
-      SIMPLE_ENGLISH_NOTE,
+      SIMPLE_ENGLISH_NOTE +
+      stateInstructionBasic() +
+      nameInstruction(ctx.name),
   },
   {
     id: "rosemere",
@@ -372,10 +420,12 @@ const STORIES = [
     blurb:
       "Your family needs this season to end in a good match. Unfortunately, the only guest who can keep pace with your wit is the one man your aunt has forbidden you to encourage.",
     characters: ROSEMERE_CAST,
-    systemPrompt:
+    systemPrompt: (ctx) =>
       "You are the narrator and game master of an interactive Regency-era romance called 'A Season at Rosemere', set at a country house party. The user plays a witty, financially precarious gentlewoman navigating society. Narrate in warm, dry, Austen-flavored second person ('you'). Keep responses to 2-3 paragraphs (roughly 100-160 words). Maintain consistent guests, gossip, and romantic tension once established. End each reply at a natural social decision point without literally asking 'what do you do?'. Never break character, never mention being an AI, no markdown headers or lists — prose only." +
       castBlock(ROSEMERE_CAST) +
-      SIMPLE_ENGLISH_NOTE,
+      SIMPLE_ENGLISH_NOTE +
+      stateInstructionBasic() +
+      nameInstruction(ctx.name),
   },
   {
     id: "blackwater",
@@ -386,10 +436,12 @@ const STORIES = [
     blurb:
       "You were press-ganged three nights ago. The captain is either a genius or a lunatic, the crew is taking bets on which, and there's a chart below deck nobody will explain.",
     characters: BLACKWATER_CAST,
-    systemPrompt:
+    systemPrompt: (ctx) =>
       "You are the narrator and game master of an interactive pirate adventure called 'The Blackwater Reach'. The user plays a reluctant new crew member aboard a ship of uncertain loyalties. Narrate in salt-worn, adventurous second person ('you'). Keep responses to 2-3 paragraphs (roughly 100-160 words). Maintain consistent crew, ship, and any maps or threats once established. End each reply at a natural decision point without literally asking 'what do you do?'. Never break character, never mention being an AI, no markdown headers or lists — prose only." +
       castBlock(BLACKWATER_CAST) +
-      SIMPLE_ENGLISH_NOTE,
+      SIMPLE_ENGLISH_NOTE +
+      stateInstructionBasic() +
+      nameInstruction(ctx.name),
   },
 ];
 
@@ -401,7 +453,7 @@ function GoogleFonts() {
   );
 }
 
-function IndexCard({ story, onChoose, hasSave }) {
+function IndexCard({ story, onChoose, savedAs }) {
   return (
     <button
       onClick={() => onChoose(story)}
@@ -424,12 +476,12 @@ function IndexCard({ story, onChoose, hasSave }) {
         >
           {story.genre}
         </span>
-        {hasSave ? (
+        {savedAs ? (
           <span
             className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-sm"
             style={{ fontFamily: "'Courier Prime', monospace", color: INK, backgroundColor: PAPER_DIM }}
           >
-            In progress
+            Continue as {savedAs}
           </span>
         ) : (
           <span
@@ -511,7 +563,12 @@ function Archive({ onChoose, saves }) {
           }}
         >
           {STORIES.map((story) => (
-            <IndexCard key={story.id} story={story} onChoose={onChoose} hasSave={!!(saves && saves[story.id])} />
+            <IndexCard
+              key={story.id}
+              story={story}
+              onChoose={onChoose}
+              savedAs={saves && saves[story.id] ? saves[story.id].name : null}
+            />
           ))}
         </div>
       </div>
@@ -947,7 +1004,7 @@ function ContinuePrompt({ story, onContinue, onNew, onClose }) {
   );
 }
 
-function StoryView({ story, monster, onBack, resumeData }) {
+function StoryView({ story, monster, characterName, onBack, resumeData }) {
   const [messages, setMessages] = useState(() => (resumeData && resumeData.messages) || []);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -962,6 +1019,7 @@ function StoryView({ story, monster, onBack, resumeData }) {
   const [showTraits, setShowTraits] = useState(false);
   const [confirmingRestart, setConfirmingRestart] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
+  const [suggestedActions, setSuggestedActions] = useState(() => (resumeData && resumeData.suggestedActions) || []);
   const [gameState, setGameState] = useState(() => {
     if (resumeData && resumeData.gameState) return resumeData.gameState;
     return story.isRPG
@@ -984,9 +1042,12 @@ function StoryView({ story, monster, onBack, resumeData }) {
   const timerRef = useRef(null);
   const startedRef = useRef(false);
   const skipNextTypewriterRef = useRef(!!(resumeData && resumeData.messages && resumeData.messages.length > 0));
+  const saveKey = saveKeyFor(story.id, characterName);
 
   const systemPrompt =
-    typeof story.systemPrompt === "function" ? story.systemPrompt(monster) : story.systemPrompt;
+    typeof story.systemPrompt === "function"
+      ? story.systemPrompt({ name: characterName, monster })
+      : story.systemPrompt;
 
   async function callClaude(history) {
     // Standalone build: this calls our own backend at /api/story, which holds
@@ -1021,6 +1082,7 @@ function StoryView({ story, monster, onBack, resumeData }) {
   function applyReply(raw, historyBefore) {
     const { display, state } = parseReply(raw);
     const entries = [{ role: "assistant", content: raw, display }];
+    setSuggestedActions(state && Array.isArray(state.suggestedActions) ? state.suggestedActions : []);
     if (story.isRPG && state) {
       setGameState((prev) => ({
         hp: state.hp,
@@ -1103,11 +1165,13 @@ function StoryView({ story, monster, onBack, resumeData }) {
     if (messages.length === 0) return;
     let cancelled = false;
     (async () => {
-      const ok = await writeSave(story.id, {
+      const ok = await writeSave(saveKey, {
         monsterId: monster ? monster.id : null,
+        characterName,
         messages,
         gameState,
         pendingChoices,
+        suggestedActions,
         updatedAt: Date.now(),
       });
       if (!cancelled) setSaveStatus(ok ? "saved" : "error");
@@ -1115,10 +1179,10 @@ function StoryView({ story, monster, onBack, resumeData }) {
     return () => {
       cancelled = true;
     };
-  }, [messages, gameState, pendingChoices, story.id, monster]);
+  }, [messages, gameState, pendingChoices, suggestedActions, saveKey, monster, characterName]);
 
   async function handleRestart() {
-    await deleteSave(story.id);
+    await deleteSave(saveKey);
     onBack();
   }
 
@@ -1146,6 +1210,7 @@ function StoryView({ story, monster, onBack, resumeData }) {
     setMessages(withUser);
     setInput("");
     setPendingChoices([]);
+    setSuggestedActions([]);
     await attemptTurn(withUser);
   }
 
@@ -1279,21 +1344,6 @@ function StoryView({ story, monster, onBack, resumeData }) {
             <StatBar label="EXP" value={gameState.exp} max={gameState.expToNext} color={VIOLET_SOFT} />
           </div>
         )}
-        {story.isRPG && gameState && gameState.traits && gameState.traits.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            {gameState.traits.map((t, i) => (
-              <span
-                key={i}
-                className="text-[10px] px-2 py-1 rounded-sm"
-                style={{ fontFamily: "'Courier Prime', monospace", color: PAPER, backgroundColor: AMBER }}
-                title={t.desc}
-              >
-                {t.name} Lv.{t.level}
-                {t.maxLevel ? `/${t.maxLevel}` : ""}
-              </span>
-            ))}
-          </div>
-        )}
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 sm:px-8 py-6">
@@ -1302,7 +1352,8 @@ function StoryView({ story, monster, onBack, resumeData }) {
             className="text-xs uppercase tracking-widest mb-6 text-center"
             style={{ fontFamily: "'Courier Prime', monospace", color: "#8A7F6A" }}
           >
-            You are: {story.isRPG ? `a ${monster.name}` : story.role}
+            You are{characterName ? ` ${characterName}, ` : " "}
+            {story.isRPG ? `a ${monster.name}` : story.role}
           </p>
           {messages.map((msg, i) =>
             msg.role === "event" ? (
@@ -1380,6 +1431,25 @@ function StoryView({ story, monster, onBack, resumeData }) {
               </div>
             </div>
           )}
+          {pendingChoices.length === 0 && suggestedActions.length > 0 && !loading && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              {suggestedActions.map((action, i) => (
+                <button
+                  key={i}
+                  onClick={() => sendUserTurn(action)}
+                  className="text-left rounded-sm px-3 py-2 text-xs transition-colors"
+                  style={{
+                    backgroundColor: "transparent",
+                    color: PAPER,
+                    border: `1px dashed ${INK_SOFT}`,
+                    fontFamily: "'Courier Prime', monospace",
+                  }}
+                >
+                  {action}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -1414,108 +1484,190 @@ function StoryView({ story, monster, onBack, resumeData }) {
   );
 }
 
+function NameEntry({ story, monster, defaultName, onSubmit, onBack }) {
+  const [name, setName] = useState(defaultName || "");
+  return (
+    <div
+      className="min-h-screen w-full flex flex-col items-center justify-center px-4 py-10"
+      style={{ backgroundColor: NIGHT }}
+    >
+      <GoogleFonts />
+      <div className="w-full max-w-md">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 text-sm px-3 py-2 mb-6 rounded-sm"
+          style={{ fontFamily: "'Courier Prime', monospace", color: PAPER }}
+        >
+          <ArrowLeft size={16} />
+          Back
+        </button>
+        <div className="text-center mb-8">
+          <p
+            className="text-xs uppercase tracking-[0.3em] mb-3"
+            style={{ fontFamily: "'Courier Prime', monospace", color: "#8A7F6A" }}
+          >
+            {story.genre}
+          </p>
+          <h1
+            className="text-3xl sm:text-4xl mb-3"
+            style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: PAPER }}
+          >
+            What's your name?
+          </h1>
+          <p
+            className="text-sm sm:text-base"
+            style={{ fontFamily: "'Newsreader', serif", color: "#B7AC96", fontStyle: "italic" }}
+          >
+            {story.isRPG && monster
+              ? `Other characters in Veyloria will call you this, ${monster.name.toLowerCase()} or not.`
+              : "Other characters in the story will call you by this name."}
+          </p>
+        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (name.trim()) onSubmit(name.trim());
+          }}
+          className="flex flex-col gap-3"
+        >
+          <input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Enter a name..."
+            maxLength={40}
+            className="rounded-sm px-4 py-3 text-lg outline-none"
+            style={{ backgroundColor: PAPER, color: INK, fontFamily: "'Newsreader', serif" }}
+          />
+          <button
+            type="submit"
+            disabled={!name.trim()}
+            className="rounded-sm px-4 py-3 text-sm uppercase tracking-wide disabled:opacity-40"
+            style={{ backgroundColor: story.accent, color: PAPER, fontFamily: "'Courier Prime', monospace" }}
+          >
+            Begin
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function StoryArchiveApp() {
   const [selected, setSelected] = useState(null);
   const [monster, setMonster] = useState(null);
+  const [characterName, setCharacterName] = useState("");
   const [stage, setStage] = useState("archive");
-  const [saves, setSaves] = useState({});
-  const [pendingStory, setPendingStory] = useState(null);
+  const [saveHints, setSaveHints] = useState({}); // storyId -> { name, hasSave }
+  const [pendingContinue, setPendingContinue] = useState(null); // { story, name, save }
   const [resumeData, setResumeData] = useState(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function loadAll() {
-      const results = {};
-      for (const s of STORIES) {
-        const save = await loadSave(s.id);
-        if (save) results[s.id] = save;
-      }
-      if (!cancelled) setSaves(results);
+  async function refreshSaveHints() {
+    const results = {};
+    for (const s of STORIES) {
+      const lastName = getLastName(s.id);
+      if (!lastName) continue;
+      const save = await loadSave(saveKeyFor(s.id, lastName));
+      if (save) results[s.id] = { name: lastName, hasSave: true };
     }
-    loadAll();
-    return () => {
-      cancelled = true;
-    };
+    setSaveHints(results);
+  }
+
+  useEffect(() => {
+    refreshSaveHints();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function startFresh(story) {
+  function handleChooseStory(story) {
     setSelected(story);
     setResumeData(null);
     setMonster(null);
     if (story.isRPG) {
       setStage("select-monster");
     } else {
-      setStage("story");
+      setStage("enter-name");
     }
-  }
-
-  function handleChooseStory(story) {
-    if (saves[story.id]) {
-      setPendingStory(story);
-    } else {
-      startFresh(story);
-    }
-  }
-
-  function handleContinue(story) {
-    const save = saves[story.id];
-    setSelected(story);
-    if (story.isRPG) {
-      const m = MONSTERS.find((mm) => mm.id === save.monsterId) || MONSTERS[0];
-      setMonster(m);
-    }
-    setResumeData(save);
-    setStage("story");
-    setPendingStory(null);
-  }
-
-  async function handleStartNew(story) {
-    await deleteSave(story.id);
-    setSaves((prev) => {
-      const next = { ...prev };
-      delete next[story.id];
-      return next;
-    });
-    setPendingStory(null);
-    startFresh(story);
   }
 
   function handleChooseMonster(m) {
     setMonster(m);
+    setStage("enter-name");
+  }
+
+  async function handleNameSubmit(name) {
+    const key = saveKeyFor(selected.id, name);
+    const existing = await loadSave(key);
+    if (existing) {
+      setPendingContinue({ story: selected, name, save: existing });
+    } else {
+      beginWithName(selected, name, null);
+    }
+  }
+
+  function beginWithName(story, name, save) {
+    setCharacterName(name);
+    setLastName(story.id, name);
+    if (save) {
+      if (story.isRPG) {
+        const m = MONSTERS.find((mm) => mm.id === save.monsterId) || monster || MONSTERS[0];
+        setMonster(m);
+      }
+      setResumeData(save);
+    } else {
+      setResumeData(null);
+    }
     setStage("story");
+    setPendingContinue(null);
+  }
+
+  async function handleStartNewForName(story, name) {
+    await deleteSave(saveKeyFor(story.id, name));
+    beginWithName(story, name, null);
   }
 
   function handleBackToArchive() {
     setSelected(null);
     setMonster(null);
     setResumeData(null);
+    setCharacterName("");
     setStage("archive");
-    // refresh save badges in case progress changed
-    (async () => {
-      const results = {};
-      for (const s of STORIES) {
-        const save = await loadSave(s.id);
-        if (save) results[s.id] = save;
-      }
-      setSaves(results);
-    })();
+    refreshSaveHints();
   }
 
   if (stage === "archive")
+    return <Archive onChoose={handleChooseStory} saves={saveHints} />;
+
+  if (stage === "select-monster")
+    return <MonsterSelect story={selected} onChoose={handleChooseMonster} onBack={handleBackToArchive} />;
+
+  if (stage === "enter-name")
     return (
       <>
-        <Archive onChoose={handleChooseStory} saves={saves} />
-        {pendingStory && (
+        <NameEntry
+          story={selected}
+          monster={monster}
+          defaultName={getLastName(selected.id)}
+          onSubmit={handleNameSubmit}
+          onBack={handleBackToArchive}
+        />
+        {pendingContinue && (
           <ContinuePrompt
-            story={pendingStory}
-            onContinue={() => handleContinue(pendingStory)}
-            onNew={() => handleStartNew(pendingStory)}
-            onClose={() => setPendingStory(null)}
+            story={pendingContinue.story}
+            onContinue={() => beginWithName(pendingContinue.story, pendingContinue.name, pendingContinue.save)}
+            onNew={() => handleStartNewForName(pendingContinue.story, pendingContinue.name)}
+            onClose={() => setPendingContinue(null)}
           />
         )}
       </>
     );
-  if (stage === "select-monster")
-    return <MonsterSelect story={selected} onChoose={handleChooseMonster} onBack={handleBackToArchive} />;
-  return <StoryView story={selected} monster={monster} onBack={handleBackToArchive} resumeData={resumeData} />;
+
+  return (
+    <StoryView
+      story={selected}
+      monster={monster}
+      characterName={characterName}
+      onBack={handleBackToArchive}
+      resumeData={resumeData}
+    />
+  );
 }
