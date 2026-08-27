@@ -14,32 +14,49 @@ const FORCED_MODEL = process.env.GROQ_MODEL; // optional manual override
 
 let cachedModel = null;
 let cachedModelAt = 0;
+const blockedModels = new Set();
 
-// Groq periodically retires/renames models, so instead of hardcoding one,
-// ask Groq which models this key can currently use and pick a sensible one.
+// Groq periodically retires/renames models (and lists non-text models like
+// TTS/audio alongside chat models), so instead of hardcoding one, ask Groq
+// which models this key can currently use and pick a sensible text-chat one.
 async function resolveModel() {
   if (FORCED_MODEL) return FORCED_MODEL;
-  if (cachedModel && Date.now() - cachedModelAt < 10 * 60 * 1000) return cachedModel;
+  if (cachedModel && !blockedModels.has(cachedModel) && Date.now() - cachedModelAt < 10 * 60 * 1000) {
+    return cachedModel;
+  }
 
   const res = await fetch("https://api.groq.com/openai/v1/models", {
     headers: { Authorization: `Bearer ${GROQ_API_KEY}` },
   });
   if (!res.ok) throw new Error(`Could not list Groq models (HTTP ${res.status})`);
   const data = await res.json();
-  const ids = (data.data || []).map((m) => m.id);
+  const ids = (data.data || []).map((m) => m.id).filter((id) => !blockedModels.has(id));
 
-  // Skip anything that isn't a general text chat model.
+  // Exclude anything that isn't a general-purpose text chat model: audio/TTS,
+  // vision, moderation, tool-use-only, and embedding models all show up in
+  // this same list alongside the chat models we actually want.
   const isChatty = (id) =>
-    !/whisper|guard|vision|tool-use|tts|embed/i.test(id);
+    !/whisper|guard|vision|tool-use|tts|embed|orpheus|canopy|playai|speech|moderation/i.test(id);
 
-  const preferredPatterns = [/70b.*versatile/i, /70b/i, /8b-instant/i, /instant/i];
+  // Prefer well-known general chat model families when possible.
+  const preferredPatterns = [
+    /llama.*70b.*versatile/i,
+    /llama.*70b/i,
+    /gpt-oss/i,
+    /qwen/i,
+    /deepseek/i,
+    /kimi|moonshot/i,
+    /gemma/i,
+    /llama.*8b-instant/i,
+    /mixtral/i,
+  ];
   let chosen = null;
   for (const pattern of preferredPatterns) {
     chosen = ids.find((id) => isChatty(id) && pattern.test(id));
     if (chosen) break;
   }
   if (!chosen) chosen = ids.find(isChatty) || ids[0];
-  if (!chosen) throw new Error("No usable Groq models were returned for this key.");
+  if (!chosen) throw new Error("No usable Groq chat models were returned for this key.");
 
   cachedModel = chosen;
   cachedModelAt = Date.now();
@@ -92,9 +109,15 @@ app.post("/api/story", async (req, res) => {
     let upstream = await callGroq(model);
     let data = await upstream.json();
 
-    // If the cached/forced model just got retired mid-session, refresh once and retry.
-    if (!upstream.ok && /does not exist|decommissioned|not found/i.test(data?.error?.message || "")) {
-      cachedModel = null;
+    // If this model can't actually be used at all (retired, needs terms
+    // acceptance, no access, etc.), blacklist it and try a fresh pick once.
+    // Don't blacklist for transient issues like rate limits.
+    const isModelLevelProblem = /does not exist|decommissioned|not found|terms acceptance|requires terms|not supported|no access/i.test(
+      data?.error?.message || ""
+    );
+    if (!upstream.ok && !FORCED_MODEL && isModelLevelProblem) {
+      blockedModels.add(model);
+      if (cachedModel === model) cachedModel = null;
       try {
         model = await resolveModel();
         upstream = await callGroq(model);
