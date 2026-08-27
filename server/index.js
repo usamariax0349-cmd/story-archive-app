@@ -9,54 +9,58 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(express.json({ limit: "2mb" }));
 
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const FORCED_MODEL = process.env.GROQ_MODEL; // optional manual override
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const FORCED_MODEL = process.env.OPENROUTER_MODEL; // optional manual override
 
 let cachedModel = null;
 let cachedModelAt = 0;
 const blockedModels = new Set();
 
-// Groq periodically retires/renames models (and lists non-text models like
-// TTS/audio alongside chat models), so instead of hardcoding one, ask Groq
-// which models this key can currently use and pick a sensible text-chat one.
+// OpenRouter's free-model lineup changes over time, so instead of hardcoding
+// one, ask OpenRouter which :free models exist right now and pick a strong one.
 async function resolveModel() {
   if (FORCED_MODEL) return FORCED_MODEL;
   if (cachedModel && !blockedModels.has(cachedModel) && Date.now() - cachedModelAt < 10 * 60 * 1000) {
     return cachedModel;
   }
 
-  const res = await fetch("https://api.groq.com/openai/v1/models", {
-    headers: { Authorization: `Bearer ${GROQ_API_KEY}` },
+  const res = await fetch("https://openrouter.ai/api/v1/models", {
+    headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}` },
   });
-  if (!res.ok) throw new Error(`Could not list Groq models (HTTP ${res.status})`);
+  if (!res.ok) throw new Error(`Could not list OpenRouter models (HTTP ${res.status})`);
   const data = await res.json();
-  const ids = (data.data || []).map((m) => m.id).filter((id) => !blockedModels.has(id));
+  const all = data.data || [];
 
-  // Exclude anything that isn't a general-purpose text chat model: audio/TTS,
-  // vision, moderation, tool-use-only, and embedding models all show up in
-  // this same list alongside the chat models we actually want.
-  const isChatty = (id) =>
-    !/whisper|guard|vision|tool-use|tts|embed|orpheus|canopy|playai|speech|moderation/i.test(id);
+  const isFree = (m) => {
+    const id = m.id || "";
+    if (!id.endsWith(":free")) return false;
+    const p = m.pricing || {};
+    return Number(p.prompt || 0) === 0 && Number(p.completion || 0) === 0;
+  };
 
-  // Prefer well-known general chat model families when possible.
+  const freeIds = all.filter(isFree).map((m) => m.id).filter((id) => !blockedModels.has(id));
+
+  // Prefer larger, more capable free models first; fall back down the list.
   const preferredPatterns = [
-    /llama.*70b.*versatile/i,
-    /llama.*70b/i,
-    /gpt-oss/i,
-    /qwen/i,
-    /deepseek/i,
-    /kimi|moonshot/i,
-    /gemma/i,
-    /llama.*8b-instant/i,
-    /mixtral/i,
+    /llama-3\.3-70b/i,
+    /llama-4-maverick/i,
+    /deepseek-r1/i,
+    /qwen3-235b/i,
+    /hermes-3.*405b/i,
+    /llama-4-scout/i,
+    /gemini.*flash/i,
+    /llama-3\.1-70b/i,
+    /gemma-3-27b/i,
+    /llama-3\.1-8b/i,
   ];
+
   let chosen = null;
   for (const pattern of preferredPatterns) {
-    chosen = ids.find((id) => isChatty(id) && pattern.test(id));
+    chosen = freeIds.find((id) => pattern.test(id));
     if (chosen) break;
   }
-  if (!chosen) chosen = ids.find(isChatty) || ids[0];
-  if (!chosen) throw new Error("No usable Groq chat models were returned for this key.");
+  if (!chosen) chosen = freeIds[0];
+  if (!chosen) throw new Error("No free OpenRouter models are currently available for this key.");
 
   cachedModel = chosen;
   cachedModelAt = Date.now();
@@ -67,15 +71,14 @@ async function resolveModel() {
 // The real API key stays here, server-side, and is never sent to the browser.
 app.post("/api/story", async (req, res) => {
   try {
-    if (!GROQ_API_KEY) {
+    if (!OPENROUTER_API_KEY) {
       return res.status(500).json({
-        error: "Server is missing GROQ_API_KEY. Set it in your environment variables.",
+        error: "Server is missing OPENROUTER_API_KEY. Set it in your environment variables.",
       });
     }
 
     const { system, messages } = req.body || {};
 
-    // Groq's API is OpenAI-compatible: one flat messages array, system role included.
     const chatMessages = [
       { role: "system", content: system || "" },
       ...(Array.isArray(messages) ? messages : []).map((m) => ({
@@ -88,15 +91,18 @@ app.post("/api/story", async (req, res) => {
     try {
       model = await resolveModel();
     } catch (e) {
-      return res.status(500).json({ error: `Could not pick a Groq model: ${e.message}` });
+      return res.status(500).json({ error: `Could not pick a free OpenRouter model: ${e.message}` });
     }
 
-    const callGroq = (modelId) =>
-      fetch("https://api.groq.com/openai/v1/chat/completions", {
+    const callOpenRouter = (modelId) =>
+      fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${GROQ_API_KEY}`,
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          // Optional but recommended by OpenRouter for attribution/rankings.
+          "HTTP-Referer": "https://story-archive-app-production.up.railway.app",
+          "X-Title": "Story Archive",
         },
         body: JSON.stringify({
           model: modelId,
@@ -106,21 +112,20 @@ app.post("/api/story", async (req, res) => {
         }),
       });
 
-    let upstream = await callGroq(model);
+    let upstream = await callOpenRouter(model);
     let data = await upstream.json();
 
-    // If this model can't actually be used at all (retired, needs terms
-    // acceptance, no access, etc.), blacklist it and try a fresh pick once.
-    // Don't blacklist for transient issues like rate limits.
-    const isModelLevelProblem = /does not exist|decommissioned|not found|terms acceptance|requires terms|not supported|no access/i.test(
-      data?.error?.message || ""
+    // If this model got retired, renamed, or is unavailable, blacklist it and
+    // try a fresh pick once rather than getting stuck on the same bad model.
+    const isModelLevelProblem = /not found|does not exist|no longer available|not a valid model|no endpoints found/i.test(
+      (data && data.error && data.error.message) || ""
     );
     if (!upstream.ok && !FORCED_MODEL && isModelLevelProblem) {
       blockedModels.add(model);
       if (cachedModel === model) cachedModel = null;
       try {
         model = await resolveModel();
-        upstream = await callGroq(model);
+        upstream = await callOpenRouter(model);
         data = await upstream.json();
       } catch (e) {
         // fall through to normal error handling below
