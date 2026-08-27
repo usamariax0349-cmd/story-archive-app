@@ -448,7 +448,7 @@ const STORIES = [
 function GoogleFonts() {
   return (
     <style>{`
-      @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,700;1,9..144,500&family=Newsreader:ital@0;1&family=Courier+Prime:wght@400;700&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,700;1,9..144,500&family=Newsreader:ital@0;1&family=Courier+Prime:wght@400;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300&family=JetBrains+Mono:wght@300;400;500&display=swap');
     `}</style>
   );
 }
@@ -576,91 +576,356 @@ function Archive({ onChoose, saves }) {
   );
 }
 
+const VESSEL_HUES = {
+  slime: "140deg",
+  goblin: "95deg",
+  kobold: "40deg",
+  wolfpup: "215deg",
+  harpy: "185deg",
+  wyrmling: "20deg",
+  spiderling: "285deg",
+  skeleton: "50deg",
+};
+
+function RiteStyles() {
+  return (
+    <style>{`
+      @keyframes riteFade { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+      @keyframes riteSpin { to { transform: rotate(360deg); } }
+      @keyframes riteBreathe { 0%, 100% { opacity: .45; } 50% { opacity: .85; } }
+      .rite-main { display: grid; grid-template-columns: minmax(260px, 372px) minmax(0, 1fr); gap: 40px; padding-top: 36px; align-items: start; }
+      .rite-detail-grid { display: grid; grid-template-columns: 200px 1fr; gap: 36px; align-items: start; }
+      @media (max-width: 860px) {
+        .rite-main { grid-template-columns: 1fr; }
+        .rite-detail-grid { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+      }
+    `}</style>
+  );
+}
+
 function MonsterSelect({ story, onChoose, onBack }) {
+  const [i, setI] = useState(0);
+  const [bound, setBound] = useState(false);
+  const s = MONSTERS[i];
+  const hue = VESSEL_HUES[s.id] || "30deg";
+
+  useEffect(() => {
+    function onKey(e) {
+      if (bound) return;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const d = e.key === "ArrowDown" ? 1 : -1;
+        setI((prev) => (prev + d + MONSTERS.length) % MONSTERS.length);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [bound]);
+
+  function accept() {
+    if (bound) return;
+    setBound(true);
+    setTimeout(() => onChoose(s), 900);
+  }
+
   return (
     <div
-      className="min-h-screen w-full flex flex-col items-center px-4 py-10 sm:py-16"
-      style={{ backgroundColor: NIGHT }}
+      style={{
+        minHeight: "100vh",
+        position: "relative",
+        overflow: "hidden",
+        background:
+          "radial-gradient(1100px 700px at 72% 42%, rgba(217,119,66,.16), transparent 65%)," +
+          "radial-gradient(700px 500px at 10% 0%, rgba(96,74,140,.18), transparent 70%)," +
+          "#08070a",
+        color: "#ece5d8",
+        fontFamily: "'Cormorant Garamond', Georgia, serif",
+        padding: "40px 20px 60px",
+      }}
     >
       <GoogleFonts />
-      <div className="w-full max-w-5xl">
+      <RiteStyles />
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          background: "radial-gradient(1200px 800px at 50% 30%, transparent, rgba(8,7,10,.72) 72%)",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          opacity: 0.5,
+          backgroundImage:
+            "repeating-linear-gradient(0deg, rgba(236,229,216,.028) 0 1px, transparent 1px 3px), repeating-linear-gradient(90deg, rgba(8,7,10,.35) 0 1px, transparent 1px 4px)",
+        }}
+      />
+
+      <div style={{ maxWidth: 1180, margin: "0 auto", position: "relative" }}>
         <button
           onClick={onBack}
-          className="flex items-center gap-2 text-sm px-3 py-2 mb-6 rounded-sm"
-          style={{ fontFamily: "'Courier Prime', monospace", color: PAPER }}
+          className="flex items-center gap-2"
+          style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: "#a29a8c", marginBottom: 28, background: "transparent" }}
         >
-          <ArrowLeft size={16} />
-          Archive
+          <ArrowLeft size={14} /> Archive
         </button>
-        <div className="text-center mb-10">
-          <p
-            className="text-xs uppercase tracking-[0.3em] mb-3"
-            style={{ fontFamily: "'Courier Prime', monospace", color: VIOLET_SOFT }}
+
+        <header
+          style={{
+            position: "relative",
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "flex-end",
+            justifyContent: "space-between",
+            gap: 32,
+            paddingBottom: 28,
+            borderBottom: "1px solid rgba(236,229,216,.12)",
+            animation: "riteFade .7s ease both",
+          }}
+        >
+          <div style={{ maxWidth: 720 }}>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, letterSpacing: ".42em", textTransform: "uppercase", color: "#d97742" }}>
+              The Rite of Second Life
+            </div>
+            <h1 style={{ margin: "14px 0 10px", fontSize: "clamp(36px, 6vw, 68px)", lineHeight: 0.95, fontWeight: 300, letterSpacing: "-.01em" }}>
+              What will you wake up as?
+            </h1>
+            <p style={{ margin: 0, fontSize: 18, lineHeight: 1.55, color: "#a29a8c", maxWidth: "60ch" }}>
+              Your old life is over. Choose the form your soul lands in — every species starts weak, and every species can grow into something else.
+            </p>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-end",
+              gap: 10,
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 11,
+              letterSpacing: ".18em",
+              color: "#6f685e",
+              whiteSpace: "nowrap",
+            }}
           >
-            The Rite of Second Life
-          </p>
-          <h1
-            className="text-4xl sm:text-5xl mb-3"
-            style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: PAPER }}
-          >
-            What will you wake up as?
-          </h1>
-          <p
-            className="text-sm sm:text-base max-w-lg mx-auto"
-            style={{ fontFamily: "'Newsreader', serif", color: "#B7AC96", fontStyle: "italic" }}
-          >
-            Your old life is over. Choose the form your soul lands in — every
-            species starts weak, and every species can grow into something else.
-          </p>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {MONSTERS.map((m) => (
+            <div>VESSELS OFFERED · {MONSTERS.length}</div>
+            <div>BINDINGS REMAINING · 01</div>
             <button
-              key={m.id}
-              onClick={() => onChoose(m)}
-              className="text-left rounded-sm p-4 transition-transform duration-200 hover:-translate-y-1 focus:outline-none"
+              onClick={() => !bound && setI(Math.floor(Math.random() * MONSTERS.length))}
               style={{
-                backgroundColor: PAPER,
-                border: `1px solid ${PAPER_DIM}`,
-                boxShadow: "0 10px 20px -12px rgba(0,0,0,0.5)",
+                marginTop: 6,
+                cursor: "pointer",
+                background: "transparent",
+                border: "1px solid rgba(217,119,66,.45)",
+                color: "#d97742",
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 10,
+                letterSpacing: ".24em",
+                padding: "9px 14px",
+                textTransform: "uppercase",
               }}
             >
-              <div className="text-3xl mb-2">{m.emoji}</div>
-              <h3
-                className="text-lg mb-1"
-                style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: INK }}
-              >
-                {m.name}
-              </h3>
-              <span
-                className="inline-block text-[10px] uppercase tracking-wide mb-2 px-2 py-0.5 rounded-sm"
-                style={{
-                  fontFamily: "'Courier Prime', monospace",
-                  color: PAPER,
-                  backgroundColor: VIOLET,
-                }}
-              >
-                {m.trait}
-              </span>
-              <p
-                className="text-xs leading-relaxed"
-                style={{ fontFamily: "'Newsreader', serif", color: "#3B3527" }}
-              >
-                {m.desc}
-              </p>
-              <p
-                className="text-[10px] mt-2 pt-2"
-                style={{
-                  fontFamily: "'Courier Prime', monospace",
-                  color: INK_SOFT,
-                  borderTop: `1px dashed ${PAPER_DIM}`,
-                }}
-              >
-                Starting HP: {m.hp}
-              </p>
+              Let fate decide
             </button>
-          ))}
-        </div>
+          </div>
+        </header>
+
+        <main className="rite-main">
+          <section style={{ display: "flex", flexDirection: "column", gap: 2, animation: "riteFade .8s ease both" }}>
+            {MONSTERS.map((m, n) => {
+              const active = n === i;
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => !bound && setI(n)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 16,
+                    width: "100%",
+                    padding: "13px 16px",
+                    cursor: "pointer",
+                    fontFamily: "'Cormorant Garamond', Georgia, serif",
+                    color: "#ece5d8",
+                    textAlign: "left",
+                    transition: "background .22s, border-color .22s, color .22s",
+                    border: "1px solid transparent",
+                    borderLeft: active ? "2px solid #d97742" : "2px solid transparent",
+                    background: active ? "rgba(217,119,66,.11)" : "transparent",
+                    borderColor: active ? "rgba(217,119,66,.28)" : "transparent",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 44,
+                      height: 44,
+                      flex: "none",
+                      display: "grid",
+                      placeItems: "center",
+                      borderRadius: "50%",
+                      border: `1px solid ${active ? "rgba(217,119,66,.5)" : "rgba(236,229,216,.13)"}`,
+                      background: "#0d0c10",
+                      fontSize: 20,
+                    }}
+                  >
+                    {m.emoji}
+                  </span>
+                  <span style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+                    <span style={{ fontSize: 21, fontWeight: 400 }}>{m.name}</span>
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, letterSpacing: ".2em", textTransform: "uppercase", color: "#7d766a" }}>
+                      {m.trait}
+                    </span>
+                  </span>
+                  <span style={{ marginLeft: "auto", fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "#6f685e" }}>{m.hp}</span>
+                </button>
+              );
+            })}
+            <p
+              style={{
+                margin: "22px 2px 0",
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 10,
+                lineHeight: 1.9,
+                letterSpacing: ".16em",
+                textTransform: "uppercase",
+                color: "#575148",
+              }}
+            >
+              ↑ ↓ to walk the circle
+            </p>
+          </section>
+
+          <section
+            style={{
+              position: "relative",
+              minHeight: 460,
+              border: "1px solid rgba(236,229,216,.1)",
+              background: "linear-gradient(160deg, rgba(236,229,216,.045), rgba(8,7,10,.2))",
+              padding: "40px 32px",
+            }}
+          >
+            <div style={{ position: "absolute", top: 0, left: 0, width: 12, height: 12, borderTop: "1px solid #d97742", borderLeft: "1px solid #d97742" }} />
+            <div style={{ position: "absolute", bottom: 0, right: 0, width: 12, height: 12, borderBottom: "1px solid #d97742", borderRight: "1px solid #d97742" }} />
+
+            <div className="rite-detail-grid">
+              <div style={{ position: "relative", width: 200, height: 200, display: "grid", placeItems: "center" }}>
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: -14,
+                    borderRadius: "50%",
+                    background: `radial-gradient(circle, hsl(${hue} 62% 52% / .34), transparent 68%)`,
+                    filter: "blur(14px)",
+                  }}
+                />
+                <div style={{ position: "absolute", inset: 0, border: "1px solid rgba(217,119,66,.35)", borderRadius: "50%", animation: "riteBreathe 5s ease-in-out infinite" }} />
+                <div style={{ position: "absolute", inset: 10, border: "1px dashed rgba(236,229,216,.14)", borderRadius: "50%", animation: "riteSpin 52s linear infinite" }} />
+                <div
+                  style={{
+                    position: "relative",
+                    width: 168,
+                    height: 168,
+                    borderRadius: "50%",
+                    display: "grid",
+                    placeItems: "center",
+                    border: "1px solid rgba(236,229,216,.2)",
+                    boxShadow: "inset 0 0 40px rgba(8,7,10,.9), 0 14px 40px rgba(0,0,0,.55)",
+                    background: "#0d0c10",
+                    fontSize: 72,
+                  }}
+                >
+                  {s.emoji}
+                </div>
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: -30,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 6,
+                    width: 220,
+                    textAlign: "center",
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 9,
+                    letterSpacing: ".3em",
+                    textTransform: "uppercase",
+                    color: "#6f685e",
+                  }}
+                >
+                  <span>
+                    VESSEL {String(i + 1).padStart(2, "0")} / {MONSTERS.length}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, letterSpacing: ".3em", textTransform: "uppercase", color: "#d97742" }}>
+                  {s.trait}
+                </div>
+                <h2 style={{ margin: "10px 0 16px", fontSize: "clamp(32px, 4vw, 52px)", lineHeight: 1, fontWeight: 300 }}>{s.name}</h2>
+                <p style={{ margin: "0 0 28px", fontSize: 18, lineHeight: 1.6, color: "#c9c1b3", maxWidth: "46ch", fontStyle: "italic", fontWeight: 300 }}>
+                  {s.desc}
+                </p>
+
+                <div style={{ maxWidth: 360, borderTop: "1px solid rgba(236,229,216,.12)", paddingTop: 16, margin: "0 auto" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 10,
+                      letterSpacing: ".22em",
+                      textTransform: "uppercase",
+                      color: "#7d766a",
+                    }}
+                  >
+                    <span>Starting HP</span>
+                    <span style={{ fontSize: 14, color: "#ece5d8" }}>{s.hp}</span>
+                  </div>
+                  <div style={{ marginTop: 10, height: 3, background: "rgba(236,229,216,.1)" }}>
+                    <div style={{ height: 3, width: `${Math.round((s.hp / 30) * 100)}%`, background: "linear-gradient(90deg, #d97742, #e8b25c)" }} />
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 18, marginTop: 32, flexWrap: "wrap", justifyContent: "center" }}>
+                  <button
+                    onClick={accept}
+                    style={{
+                      cursor: "pointer",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 11,
+                      letterSpacing: ".22em",
+                      textTransform: "uppercase",
+                      padding: "15px 26px",
+                      border: `1px solid ${bound ? "#e8b25c" : "#d97742"}`,
+                      background: bound ? "#e8b25c" : "transparent",
+                      color: bound ? "#12100e" : "#f0a877",
+                      transition: "all .28s",
+                    }}
+                  >
+                    {bound ? `Form bound · ${s.name}` : "Accept this form"}
+                  </button>
+                  <span
+                    style={{
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 10,
+                      lineHeight: 1.7,
+                      letterSpacing: ".16em",
+                      textTransform: "uppercase",
+                      color: "#575148",
+                      maxWidth: "26ch",
+                    }}
+                  >
+                    {bound ? "The circle closes. Your soul is en route." : "Once accepted, the form is bound for the whole of the second life."}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
       </div>
     </div>
   );
