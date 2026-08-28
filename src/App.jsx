@@ -499,6 +499,8 @@ const ISEKAI_CAST = [
 function isekaiSystemPrompt(monster, name) {
   return `You are the game master of an interactive isekai reincarnation adventure called "Echoes of a Second Life," set in a high fantasy world called Veyloria where humans, elves, dwarves, beastfolk, fae, dragons, demons, and monsters of every kind coexist and clash across many kingdoms and wilds. The user has just died in their old human life and reincarnated as a ${monster.name} (${monster.desc}). Their starting stats are HP ${monster.hp}/${monster.hp}, MP ${monster.mp}/${monster.mp}, Level 1, EXP 0/${monster.expToNext}, with no skills yet.
 
+For the opening stretch of the story, before any human or major named character is introduced, stay entirely with the user's own new body and immediate surroundings — the physical sensations of the new form, its instincts and limits, the terrain around it, and low-stakes discovery like foraging, weak wild creatures, or first tentative use of a skill or trait. Let the user actually level up at least once and get a real feel for what their species can do before any human, settlement, or named recurring character (Sera Windwalker, Old Bracken, Grael, the Ashwyrm, or anyone else) enters the story. Don't rush toward plot or people; let the first several exchanges genuinely be about the user learning their own new existence.
+
 Ordinary people in Veyloria fear and hunt monsters on sight — this is the realistic default reaction, not the exception. A monster capable of speech and independent thought is rare enough that most humans have never knowingly met one and have no script for it. The user's ability to think and speak does not make them safe around people; if anything it makes them a specific, unsettling kind of threat. Revealing sentience to the wrong person, crowd, or guard is a genuinely dangerous choice with real consequences (panic, an attack, being reported to the guild or Watch), not a formality to get past on the way to being accepted. Different monster species and even individual monsters are also frequently hostile to each other over territory and prey, not just to humans — the wilds are dangerous on every side, not just the human one.
 
 An ordinary human, alone, is physically weak compared to most monsters and knows it — a lone farmer, merchant, or traveler who spots a monster will realistically flee, hide, or shout for help rather than attack it themselves, since doing otherwise is close to suicidal for someone untrained. Real danger to the user comes from people equipped and willing to actually fight monsters: trained adventurers, guild parties, City Watch patrols called in for exactly this, or numbers — several armed people together, or a mob with nothing left to lose. Keep this distinction sharp: an unarmed lone civilian encounter should read as tense but survivable through avoidance, while a real hunting party or guild response should read as genuinely dangerous.
@@ -750,7 +752,7 @@ const STORIES = [
     title: "Echoes of a Second Life",
     genre: "Isekai Reincarnation",
     accent: VIOLET,
-    coverArt: "/art/npc-ashwyrm.png",
+    coverArt: "/art/cover-isekai.png",
     role: "A monster of your choosing, in a world of every race and magic",
     blurb:
       "You died. You woke up as something else — small, strange, and far from human — in a world of humans, elves, fae, and dragons that has no idea you used to be one of them.",
@@ -1466,6 +1468,39 @@ function WorldEventCard({ text }) {
         <span className="text-sm italic" style={{ fontFamily: "'Newsreader', serif" }}>
           {text}
         </span>
+      </div>
+    </div>
+  );
+}
+
+function CharacterDebutCard({ character }) {
+  return (
+    <div className="w-full flex justify-start mb-4">
+      <div
+        className="w-full max-w-[280px] rounded-sm overflow-hidden"
+        style={{ border: `1px solid ${PAPER_DIM}`, boxShadow: "0 10px 26px -12px rgba(0,0,0,0.6)" }}
+      >
+        <img
+          src={character.art}
+          alt={character.name}
+          style={{ width: "100%", height: 320, objectFit: "cover", display: "block" }}
+        />
+        <div className="p-3" style={{ backgroundColor: PAPER }}>
+          <div
+            className="text-base leading-snug"
+            style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: INK }}
+          >
+            {character.name}
+          </div>
+          {character.role && (
+            <div
+              className="text-[10px] uppercase tracking-wide mt-0.5"
+              style={{ fontFamily: "'Courier Prime', monospace", color: INK_SOFT }}
+            >
+              {character.role}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -2336,9 +2371,28 @@ function StoryView({ story, monster, characterName, onBack, resumeData }) {
                     setRevealCount(msg.display.length);
                   }}
                 />
-                {msg.role === "assistant" && (
-                  <MentionedCharacters text={msg.display} characters={story.characters} />
-                )}
+                {msg.role === "assistant" &&
+                  story.characters &&
+                  (() => {
+                    const priorText = messages
+                      .slice(0, i)
+                      .filter((m) => m.role === "assistant")
+                      .map((m) => m.display)
+                      .join(" ");
+                    const withArt = story.characters.filter((c) => c.art && msg.display.includes(c.name));
+                    const debuting = withArt.filter((c) => !priorText.includes(c.name));
+                    const known = withArt.filter((c) => priorText.includes(c.name));
+                    return (
+                      <>
+                        {debuting.map((c) => (
+                          <CharacterDebutCard key={c.name} character={c} />
+                        ))}
+                        {known.length > 0 && (
+                          <MentionedCharacters text={known.map((c) => c.name).join(" ")} characters={known} />
+                        )}
+                      </>
+                    );
+                  })()}
               </React.Fragment>
             )
           )}
