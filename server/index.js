@@ -94,7 +94,7 @@ app.post("/api/story", async (req, res) => {
       return res.status(500).json({ error: `Could not pick a free OpenRouter model: ${e.message}` });
     }
 
-    const callOpenRouter = (modelId) =>
+    const callOpenRouter = (modelId, msgs) =>
       fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -106,13 +106,13 @@ app.post("/api/story", async (req, res) => {
         },
         body: JSON.stringify({
           model: modelId,
-          messages: chatMessages,
-          max_tokens: 1000,
+          messages: msgs,
+          max_tokens: 1600,
           temperature: 1,
         }),
       });
 
-    let upstream = await callOpenRouter(model);
+    let upstream = await callOpenRouter(model, chatMessages);
     let data = await upstream.json();
 
     // If this model got retired, renamed, or is unavailable, blacklist it and
@@ -125,7 +125,7 @@ app.post("/api/story", async (req, res) => {
       if (cachedModel === model) cachedModel = null;
       try {
         model = await resolveModel();
-        upstream = await callOpenRouter(model);
+        upstream = await callOpenRouter(model, chatMessages);
         data = await upstream.json();
       } catch (e) {
         // fall through to normal error handling below
@@ -137,13 +137,48 @@ app.post("/api/story", async (req, res) => {
       return res.status(upstream.status).json({ error: message });
     }
 
-    const text = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
+    // The model can get cut off before finishing — before it reaches the
+    // point where it's supposed to stop and hand control back with choices.
+    // If that happens (finish_reason "length" and no <<STATE>> marker yet),
+    // automatically ask it to keep going from where it left off, up to a
+    // few times, instead of returning a dead-end reply.
+    let fullText = (data?.choices?.[0]?.message?.content || "").trim();
+    let finishReason = data?.choices?.[0]?.finish_reason;
+    let runningMessages = chatMessages;
+    let hops = 0;
+    const MAX_CONTINUATION_HOPS = 3;
 
-    if (!text.trim()) {
+    while (finishReason === "length" && !fullText.includes("<<STATE>>") && hops < MAX_CONTINUATION_HOPS) {
+      hops += 1;
+      runningMessages = [
+        ...runningMessages,
+        { role: "assistant", content: fullText },
+        {
+          role: "user",
+          content:
+            "Continue directly from exactly where you left off, picking up mid-sentence if needed. Do not repeat anything you already wrote. Wrap up soon and remember to end with the <<STATE>> marker and its JSON as instructed.",
+        },
+      ];
+      let contUpstream;
+      let contData;
+      try {
+        contUpstream = await callOpenRouter(model, runningMessages);
+        contData = await contUpstream.json();
+      } catch (e) {
+        break;
+      }
+      if (!contUpstream.ok) break;
+      const piece = (contData?.choices?.[0]?.message?.content || "").trim();
+      if (!piece) break;
+      fullText = `${fullText}${piece}`;
+      finishReason = contData?.choices?.[0]?.finish_reason;
+    }
+
+    if (!fullText) {
       return res.status(502).json({ error: "The model returned an empty response." });
     }
 
-    res.json({ text: text.trim() });
+    res.json({ text: fullText });
   } catch (err) {
     res.status(500).json({ error: err.message || "Unknown server error." });
   }
