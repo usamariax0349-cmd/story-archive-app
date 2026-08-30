@@ -33,9 +33,12 @@ function LandingStyles() {
       .sa-landing ::selection { background:${VIOLET}; color:${PAPER}; }
       .sa-stage { perspective:1400px; }
       .sa-ring { transform-style:preserve-3d; }
-      .sa-book { position:absolute; top:50%; left:50%; width:clamp(120px,15vw,190px); aspect-ratio:2/3; transform-style:preserve-3d; }
+      .sa-book { position:absolute; top:50%; left:50%; width:clamp(120px,15vw,190px); aspect-ratio:2/3; transform-style:preserve-3d; cursor:pointer; background:none; border:none; padding:0; will-change:transform; }
       .sa-book-face { position:absolute; inset:0; border-radius:6px; overflow:hidden; backface-visibility:hidden; box-shadow:0 20px 45px -18px rgba(0,0,0,0.75); border:1px solid rgba(217,178,92,0.35); }
       .sa-book-back { position:absolute; inset:0; border-radius:6px; backface-visibility:hidden; transform:rotateY(180deg); box-shadow:0 20px 45px -18px rgba(0,0,0,0.75); }
+      .sa-book:focus-visible .sa-book-face, .sa-book:focus-visible .sa-book-back { outline: 2px solid #D9B25C; outline-offset: 2px; }
+      .sa-stack-card { cursor:pointer; background:none; border:none; padding:0; text-align:left; will-change:transform; }
+      .sa-stack-card:focus-visible { outline: 2px solid #D9B25C; outline-offset: 4px; border-radius: 6px; }
       @media (prefers-reduced-motion: reduce) {
         .sa-landing * { animation-duration:0.001ms !important; transition-duration:0.001ms !important; }
       }
@@ -60,20 +63,23 @@ function EnterPill({ onEnter, label = "Enter the Archive" }) {
   );
 }
 
-function BookRing({ stories, containerRef }) {
+function BookRing({ stories, containerRef, onSelectStory }) {
   const { scrollYProgress } = useScroll({ target: containerRef, offset: ["start start", "end end"] });
+  // Smooth out raw scroll input (mouse-wheel steps, trackpad jitter) so the
+  // ring glides instead of jumping in lockstep with every scroll event.
+  const smoothProgress = useSpring(scrollYProgress, { stiffness: 90, damping: 26, mass: 0.4, restDelta: 0.0005 });
   const introEnd = 0.08;
   const n = stories.length;
   const totalSweep = ((n - 1) / n) * 360;
 
-  const groupRotate = useTransform(scrollYProgress, [0, introEnd, 1], [0, 0, -totalSweep]);
-  const heroOpacity = useTransform(scrollYProgress, [0, introEnd], [1, 0]);
-  const hintOpacity = useTransform(scrollYProgress, [0, introEnd * 0.6], [1, 0]);
-  const labelOpacity = useTransform(scrollYProgress, [introEnd * 0.75, introEnd], [0, 1]);
+  const groupRotate = useTransform(smoothProgress, [0, introEnd, 1], [0, 0, -totalSweep]);
+  const heroOpacity = useTransform(smoothProgress, [0, introEnd], [1, 0]);
+  const hintOpacity = useTransform(smoothProgress, [0, introEnd * 0.6], [1, 0]);
+  const labelOpacity = useTransform(smoothProgress, [introEnd * 0.75, introEnd], [0, 1]);
 
   const [activeIndex, setActiveIndex] = useState(-1);
 
-  useMotionValueEvent(scrollYProgress, "change", (p) => {
+  useMotionValueEvent(smoothProgress, "change", (p) => {
     if (p < introEnd) {
       if (activeIndex !== -1) setActiveIndex(-1);
       return;
@@ -91,9 +97,14 @@ function BookRing({ stories, containerRef }) {
         {stories.map((story, i) => {
           const angle = i * (360 / n);
           return (
-            <div
+            <motion.button
               key={story.id}
+              type="button"
               className="sa-book"
+              aria-label={`Open ${story.title}`}
+              onClick={() => onSelectStory && onSelectStory(story)}
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.95 }}
               style={{ transform: `translate(-50%,-50%) rotateY(${angle}deg) translateZ(var(--radius))` }}
             >
               <div
@@ -122,7 +133,7 @@ function BookRing({ stories, containerRef }) {
                 </div>
               </div>
               <div className="sa-book-back" style={{ background: `linear-gradient(160deg, ${story.accent}, #171310)` }} />
-            </div>
+            </motion.button>
           );
         })}
       </motion.div>
@@ -348,8 +359,9 @@ function WorldDiagram({ stories }) {
   const ref = useRef(null);
   const rows = stories.slice(0, 5);
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start 70%", "end 30%"] });
+  const smoothProgress = useSpring(scrollYProgress, { stiffness: 90, damping: 26, mass: 0.4 });
   const [activeRow, setActiveRow] = useState(0);
-  useMotionValueEvent(scrollYProgress, "change", (p) => {
+  useMotionValueEvent(smoothProgress, "change", (p) => {
     const idx = Math.min(rows.length - 1, Math.max(0, Math.floor(p * rows.length)));
     if (idx !== activeRow) setActiveRow(idx);
   });
@@ -402,7 +414,7 @@ function WorldDiagram({ stories }) {
   );
 }
 
-export default function Landing({ stories, featuredCharacter, onEnter }) {
+export default function Landing({ stories, featuredCharacter, onEnter, onSelectStory }) {
   const heroRef = useRef(null);
 
   return (
@@ -412,7 +424,7 @@ export default function Landing({ stories, featuredCharacter, onEnter }) {
 
       <div ref={heroRef} style={{ position: "relative", height: "360vh" }}>
         <div style={{ position: "sticky", top: 0, height: "100vh", overflow: "hidden" }}>
-          <BookRing stories={stories} containerRef={heroRef} />
+          <BookRing stories={stories} containerRef={heroRef} onSelectStory={onSelectStory} />
         </div>
       </div>
 
@@ -491,29 +503,63 @@ export default function Landing({ stories, featuredCharacter, onEnter }) {
           initial="hidden"
           whileInView="show"
           viewport={{ once: true, amount: 0.5 }}
-          className="relative mx-auto mb-12"
-          style={{ width: 200, height: 260 }}
+          className="relative mx-auto mb-16"
+          style={{ width: "min(92vw, 620px)", height: 260 }}
         >
-          {stories.map((s, i) => (
-            <motion.div
-              key={s.id}
-              variants={{ hidden: { opacity: 0, y: 40 }, show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: "easeOut" } } }}
-              className="absolute inset-0 rounded"
-              style={{
-                background: `linear-gradient(160deg, ${s.accent}, #171310)`,
-                transform: `translate(${(i - 3) * 3}px, ${(i - 3) * -3}px) rotate(${(i - 3) * 2.4}deg)`,
-                zIndex: i,
-                border: "1px solid rgba(255,255,255,0.06)",
-                boxShadow: "0 20px 50px -20px rgba(0,0,0,0.7)",
-              }}
-            />
-          ))}
+          {stories.map((s, i) => {
+            const n = stories.length;
+            const offset = i - (n - 1) / 2;
+            const cardWidth = 128;
+            const spacing = 54;
+            return (
+              <motion.button
+                key={s.id}
+                type="button"
+                className="sa-stack-card absolute top-0 left-1/2 rounded overflow-hidden group"
+                aria-label={`Open ${s.title}`}
+                onClick={() => onSelectStory && onSelectStory(s)}
+                variants={{ hidden: { opacity: 0, y: 40 }, show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: "easeOut" } } }}
+                whileHover={{ y: -22, scale: 1.06, zIndex: 20, transition: { duration: 0.25 } }}
+                whileTap={{ scale: 0.98 }}
+                style={{
+                  width: cardWidth,
+                  height: 192,
+                  marginLeft: -cardWidth / 2 + offset * spacing,
+                  transformOrigin: "bottom center",
+                  transform: `rotate(${offset * 6}deg)`,
+                  background: s.coverArt ? undefined : `linear-gradient(160deg, ${s.accent}, #171310)`,
+                  backgroundImage: s.coverArt ? `url(${s.coverArt})` : undefined,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                  zIndex: i,
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  boxShadow: "0 20px 50px -20px rgba(0,0,0,0.7)",
+                }}
+              >
+                <div
+                  className="absolute inset-0 opacity-70 group-hover:opacity-100 group-focus-visible:opacity-100"
+                  style={{
+                    transition: "opacity .2s ease",
+                    background: "linear-gradient(to top, rgba(10,8,6,0.92), rgba(10,8,6,0.08) 60%)",
+                  }}
+                />
+                <div className="absolute left-2 right-2 bottom-2 text-left">
+                  <div className="mono" style={{ fontSize: 8, color: GOLD }}>
+                    {s.genre}
+                  </div>
+                  <div style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 11.5, color: PAPER, lineHeight: 1.15, marginTop: 2 }}>
+                    {s.title}
+                  </div>
+                </div>
+              </motion.button>
+            );
+          })}
         </motion.div>
         <motion.h2 variants={FADE_UP} initial="hidden" whileInView="show" viewport={{ once: true }} style={{ fontSize: "clamp(2rem,5vw,3rem)", color: PAPER }}>
           Begin your story.
         </motion.h2>
         <motion.p variants={FADE_UP} initial="hidden" whileInView="show" viewport={{ once: true }} className="mt-4" style={{ color: PAPER_DIM, fontStyle: "italic" }}>
-          Seven worlds. One archive. Your choices.
+          Seven worlds. One archive. Pick a card, or start below.
         </motion.p>
         <motion.button
           onClick={onEnter}
