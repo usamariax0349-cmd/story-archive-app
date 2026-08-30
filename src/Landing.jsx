@@ -27,18 +27,22 @@ function LandingStyles() {
   return (
     <style>{`
       @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Newsreader:ital,wght@0,400;0,500;1,400;1,500&family=Courier+Prime:wght@400;700&display=swap');
-      .sa-landing { --radius: clamp(70px, 8vw, 135px); background:${NIGHT}; color:${PAPER}; font-family:'Newsreader',serif; }
+      .sa-landing { --radius: clamp(110px, 15vw, 220px); background:${NIGHT}; color:${PAPER}; font-family:'Newsreader',serif; }
       .sa-landing h1, .sa-landing h2 { font-family:'Fraunces',serif; font-weight:700; margin:0; }
       .sa-landing .mono { font-family:'Courier Prime',monospace; letter-spacing:0.14em; text-transform:uppercase; }
       .sa-landing ::selection { background:${VIOLET}; color:${PAPER}; }
+      .sa-hero { min-height:100vh; display:flex; align-items:center; padding-top:96px; padding-bottom:64px; }
       .sa-stage { perspective:1200px; overflow:hidden; cursor:ns-resize; }
       .sa-ring { transform-style:preserve-3d; }
-      .sa-book { position:absolute; top:50%; left:50%; width:clamp(78px,9vw,128px); aspect-ratio:2/3; transform-style:preserve-3d; cursor:pointer; background:none; border:none; padding:0; will-change:transform; }
+      .sa-book { position:absolute; top:50%; left:50%; width:clamp(90px,12vw,150px); aspect-ratio:2/3; transform-style:preserve-3d; cursor:pointer; background:none; border:none; padding:0; will-change:transform; }
       .sa-book-face { position:absolute; inset:0; border-radius:6px; overflow:hidden; backface-visibility:hidden; box-shadow:0 20px 45px -18px rgba(0,0,0,0.75); border:1px solid rgba(217,178,92,0.35); }
       .sa-book-back { position:absolute; inset:0; border-radius:6px; backface-visibility:hidden; transform:rotateY(180deg); box-shadow:0 20px 45px -18px rgba(0,0,0,0.75); }
       .sa-book:focus-visible .sa-book-face, .sa-book:focus-visible .sa-book-back { outline: 2px solid #D9B25C; outline-offset: 2px; }
       .sa-stack-card { cursor:pointer; background:none; border:none; padding:0; text-align:left; will-change:transform; }
       .sa-stack-card:focus-visible { outline: 2px solid #D9B25C; outline-offset: 4px; border-radius: 6px; }
+      @media (max-width: 1023px) {
+        .sa-hero { min-height:auto; align-items:flex-start; padding-top:88px; padding-bottom:40px; }
+      }
       @media (prefers-reduced-motion: reduce) {
         .sa-landing * { animation-duration:0.001ms !important; transition-duration:0.001ms !important; }
       }
@@ -116,7 +120,7 @@ function BookStage({ stories, onSelectStory }) {
 
   return (
     <div className="w-full">
-      <div ref={stageRef} className="sa-stage relative mx-auto" style={{ height: "min(42vh, 340px)", maxWidth: 480 }}>
+      <div ref={stageRef} className="sa-stage relative mx-auto" style={{ height: "min(52vh, 440px)", maxWidth: 620 }}>
         <motion.div
           className="sa-ring absolute"
           style={{ top: "50%", left: "50%", width: 1, height: 1, rotateY: rotation }}
@@ -374,9 +378,8 @@ function WorldDiagram({ stories }) {
     <div ref={ref} className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
       <div className="flex justify-center">
         <motion.svg
-          width={size}
-          height={size}
           viewBox={`0 0 ${size} ${size}`}
+          style={{ width: "100%", height: "auto", maxWidth: size }}
           animate={{ rotate: 360 }}
           transition={{ duration: 60, repeat: Infinity, ease: "linear" }}
         >
@@ -419,7 +422,7 @@ export default function Landing({ stories, featuredCharacter, onEnter, onSelectS
       <LandingStyles />
       <EnterPill onEnter={onEnter} />
 
-      <section className="px-6 sm:px-10 lg:px-16" style={{ minHeight: "100vh", display: "flex", alignItems: "center", paddingTop: 96, paddingBottom: 64 }}>
+      <section className="sa-hero px-6 sm:px-10 lg:px-16">
         <div className="w-full mx-auto max-w-6xl flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
           <div style={{ flex: "1 1 380px", maxWidth: 480, textAlign: "left" }}>
             <span className="mono text-xs" style={{ color: VIOLET }}>
@@ -529,8 +532,10 @@ export default function Landing({ stories, featuredCharacter, onEnter, onSelectS
           {stories.map((s, i) => {
             const n = stories.length;
             const offset = i - (n - 1) / 2;
-            const cardWidth = 128;
-            const spacing = 54;
+            // Responsive card size/spacing (capped on desktop, shrinking on
+            // narrow viewports) so the fan can never overflow the screen.
+            const cardWidthCss = "min(148px, 24vw)";
+            const spacingCss = "min(58px, 9vw)";
             return (
               <motion.button
                 key={s.id}
@@ -543,9 +548,9 @@ export default function Landing({ stories, featuredCharacter, onEnter, onSelectS
                 whileTap={{ scale: 0.98 }}
                 transformTemplate={(_, generated) => `rotate(${offset * 6}deg) ${generated}`}
                 style={{
-                  width: cardWidth,
-                  height: 192,
-                  marginLeft: -cardWidth / 2 + offset * spacing,
+                  width: cardWidthCss,
+                  aspectRatio: "2/3",
+                  marginLeft: `calc(${cardWidthCss} / -2 + ${offset} * ${spacingCss})`,
                   transformOrigin: "bottom center",
                   background: s.coverArt ? undefined : `linear-gradient(160deg, ${s.accent}, #171310)`,
                   backgroundImage: s.coverArt ? `url(${s.coverArt})` : undefined,
