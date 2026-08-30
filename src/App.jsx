@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Send, Loader2, PenLine, Sparkles, Users, X, Star, RotateCcw, Shield, Heart } from "lucide-react";
+import Landing from "./Landing.jsx";
 
 const PAPER = "#EDE4D3";
 const PAPER_DIM = "#E1D5B8";
@@ -2826,7 +2828,7 @@ export default function StoryArchiveApp() {
   const [selected, setSelected] = useState(null);
   const [monster, setMonster] = useState(null);
   const [characterName, setCharacterName] = useState("");
-  const [stage, setStage] = useState("archive");
+  const [stage, setStage] = useState("landing");
   const [saveHints, setSaveHints] = useState({}); // storyId -> { name, hasSave }
   const [pendingContinue, setPendingContinue] = useState(null); // { story, name, save }
   const [resumeData, setResumeData] = useState(null);
@@ -2903,14 +2905,21 @@ export default function StoryArchiveApp() {
     refreshSaveHints();
   }
 
-  if (stage === "archive")
-    return <Archive onChoose={handleChooseStory} saves={saveHints} />;
-
-  if (stage === "select-monster")
-    return <MonsterSelect story={selected} onChoose={handleChooseMonster} onBack={handleBackToArchive} />;
-
-  if (stage === "enter-name")
-    return (
+  let content;
+  if (stage === "landing") {
+    content = (
+      <Landing
+        stories={STORIES}
+        featuredCharacter={ISEKAI_CAST[0]}
+        onEnter={() => setStage("archive")}
+      />
+    );
+  } else if (stage === "archive") {
+    content = <Archive onChoose={handleChooseStory} saves={saveHints} />;
+  } else if (stage === "select-monster") {
+    content = <MonsterSelect story={selected} onChoose={handleChooseMonster} onBack={handleBackToArchive} />;
+  } else if (stage === "enter-name") {
+    content = (
       <>
         <NameEntry
           story={selected}
@@ -2929,14 +2938,29 @@ export default function StoryArchiveApp() {
         )}
       </>
     );
+  } else {
+    content = (
+      <StoryView
+        story={selected}
+        monster={monster}
+        characterName={characterName}
+        onBack={handleBackToArchive}
+        resumeData={resumeData}
+      />
+    );
+  }
 
   return (
-    <StoryView
-      story={selected}
-      monster={monster}
-      characterName={characterName}
-      onBack={handleBackToArchive}
-      resumeData={resumeData}
-    />
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={stage}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        transition={{ duration: 0.35, ease: "easeInOut" }}
+      >
+        {content}
+      </motion.div>
+    </AnimatePresence>
   );
 }
