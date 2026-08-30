@@ -2912,6 +2912,7 @@ export default function StoryArchiveApp() {
         stories={STORIES}
         featuredCharacter={ISEKAI_CAST[0]}
         onEnter={() => setStage("archive")}
+        onSelectStory={handleChooseStory}
       />
     );
   } else if (stage === "archive") {
