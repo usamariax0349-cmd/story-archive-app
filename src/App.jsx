@@ -666,6 +666,7 @@ const ASHGARD_CAST = [
   {
     name: "Orran Steelwing",
     role: "elder rider and mentor",
+    art: "/art/npc-orran.png",
     bio: "Gruff and fair, carrying decades of scars. Tall and broad-shouldered, weathered but still strong. Iron-gray hair cropped short with a thick matching beard. Steady blue-gray eyes, deep lines across his face, and a long scar along one forearm visible when his sleeves are rolled up. Wears a weathered leather rider's coat, fur-lined at the collar. Carries a curved rider's saber and a battered saddle-horn whistle for calling dragons. Secretly terrified the hold won't survive the winter, and spends his evenings on logistics no one else wants to touch.",
     personality: "Gruff but fundamentally fair, carries responsibility for everyone quietly, softens only around those he respects.",
     speech: "Short, practical instructions; rare praise lands heavier because it's rare. Gets clipped and terse when worried rather than emotional.",
@@ -673,6 +674,7 @@ const ASHGARD_CAST = [
   {
     name: "Dessa Ashcombe",
     role: "rival rider",
+    art: "/art/npc-dessa.png",
     bio: "Ambitious and sharp-tongued, resentful that you were chosen over her. Athletic, average height, all coiled energy. Close-cropped auburn hair, sharp green eyes, freckled sharp features, and a proud tilt to her chin. Wears fitted flight leathers in dark red and black. Carries a lightweight rider's lance and dragon-scale bracers. Runs her own training and alliances in the hold whether or not you're watching.",
     personality: "Ambitious and proud, resentment masking real insecurity about being passed over, capable of grudging respect if earned.",
     speech: "Sharp, competitive jabs and backhanded compliments; goes quiet and unexpectedly sincere in rare unguarded moments.",
@@ -680,6 +682,7 @@ const ASHGARD_CAST = [
   {
     name: "Steward Bellamy",
     role: "hold steward",
+    art: "/art/npc-bellamy.png",
     bio: "An anxious bureaucrat juggling supplies, politics, and a dozen competing demands. Stout, balding, slightly stooped from years bent over ledgers. A fringe of graying hair, small eyes darting behind spectacles, a round face fixed in perpetual worry, ink stains near his mouth from chewing quills. Wears a rumpled steward's robe. Carries an overloaded satchel of scrolls and ledgers, with a spare quill tucked behind one ear. More powerful than he looks, and always mid-crisis about something unrelated to you.",
     personality: "Anxious and overextended but genuinely competent, more decisive than he seems once pushed to act.",
     speech: "Rambles through lists and worries out loud; his voice steadies and sharpens the moment a real decision is actually needed.",
@@ -737,6 +740,7 @@ const SIGNAL_CAST = [
   {
     name: "the Signal",
     role: "unknown transmission",
+    art: "/art/npc-signal.png",
     bio: "A survivor — or something claiming to be one — broadcasting from outside the station on its own schedule. Has no fixed appearance — glimpsed, when at all, only as a distorted waveform on a display or an unstable silhouette breaking apart in bursts of static, sometimes human-shaped, sometimes not. Cagey about who or what it actually is.",
     personality: "Cagey and self-protective, oddly desperate for contact despite the secrecy, motives unclear even to itself at times.",
     speech: "Fragmented, delayed, sometimes warm and sometimes clipped mid-transmission as if changing its mind about how much to say.",
@@ -780,6 +784,7 @@ const VELLMOOR_CAST = [
   {
     name: "Lord Ashen Vellmoor",
     role: "the ailing lord",
+    art: "/art/npc-vellmoor.png",
     bio: "Courtly, evasive, and fixated on a wife the rest of the staff swears never existed. Tall, gaunt, stooped slightly. Silver-streaked dark hair left unkempt. Hollow, dark-ringed, haunted eyes. Pale skin, sunken cheeks, an aristocratic nose. Wears an old velvet dressing gown over a once-fine but now faded suit. Carries a cane he doesn't seem to actually need, and touches a locket often. Keeps his own hours and his own counsel, day or night.",
     personality: "Courtly and evasive, grief masquerading as eccentricity, capable of sudden lucid honesty that unsettles more than his usual vagueness.",
     speech: "Formal, old-fashioned phrasing that circles questions rather than answering them; drops into plain, raw language in rare moments of clarity.",
@@ -787,6 +792,7 @@ const VELLMOOR_CAST = [
   {
     name: "Mrs. Prewitt",
     role: "head housekeeper",
+    art: "/art/npc-prewitt.png",
     bio: "Brisk and protective of the house's secrets, though not unkind to you. Average height, stern and upright posture. Tightly pinned gray hair. Sharp, watchful brown eyes. Lined face fixed in a no-nonsense expression. Wears a dark high-collared dress with a starched white apron. Carries a ring of keys at her waist and a lantern for night rounds. Runs the estate's daily rhythms with or without your involvement.",
     personality: "Brisk and no-nonsense, protective of the household's secrets and its people in equal measure, kinder than her tone suggests.",
     speech: "Efficient, faintly clipped instructions; softens noticeably when speaking about the lord or worrying over the user's safety.",
@@ -794,6 +800,7 @@ const VELLMOOR_CAST = [
   {
     name: "Silas",
     role: "groundskeeper",
+    art: "/art/npc-silas.png",
     bio: "Silent and watchful, with his own nightly rounds through the grounds. Tall and wiry, weathered by years outdoors. Graying, unkempt hair tucked under a worn cap. Narrow, watchful eyes set in leathery, weathered skin, a permanent squint. Wears a mud-stained coat and heavy boots. Carries a lantern, and a set of garden shears he keeps oddly close at hand. Seems to know more about the halls than he's ever said aloud.",
     personality: "Silent and watchful by habit, not unfriendly but deeply private, more troubled than he shows about what he's seen on his rounds.",
     speech: "Says little, often just a few words or a gesture; the rare times he does explain something, he speaks carefully as though choosing every word.",
@@ -950,6 +957,7 @@ const STORIES = [
     title: "Wings Over Ashgard",
     genre: "Fantasy",
     accent: "#C9A227",
+    coverArt: "/art/cover-ashgard.png",
     role: "A newly bonded rider to a wild, half-tamed dragon",
     blurb:
       "The bonding scar on your palm still burns. Your dragon answers to no one, the mountain hold is starving, and the old riders don't trust you yet.",
@@ -984,6 +992,8 @@ const STORIES = [
     title: "Signal Lost",
     genre: "Sci-Fi",
     accent: "#3F6D63",
+    coverArt: "/art/cover-signal.png",
+    playerArt: "/art/player-signal.png",
     role: "The last engineer awake on a drifting research station",
     blurb:
       "Cryo failed early. The rest of the crew won't wake for another four months, and something on the hull sensor logs woke up before you did.",
