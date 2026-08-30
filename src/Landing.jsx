@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   motion,
+  useAnimationFrame,
   useMotionValue,
   useMotionValueEvent,
   useScroll,
   useSpring,
-  useTransform,
   AnimatePresence,
 } from "framer-motion";
 
@@ -27,13 +27,13 @@ function LandingStyles() {
   return (
     <style>{`
       @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Newsreader:ital,wght@0,400;0,500;1,400;1,500&family=Courier+Prime:wght@400;700&display=swap');
-      .sa-landing { --radius: clamp(150px, 24vw, 320px); background:${NIGHT}; color:${PAPER}; font-family:'Newsreader',serif; }
+      .sa-landing { --radius: clamp(70px, 8vw, 135px); background:${NIGHT}; color:${PAPER}; font-family:'Newsreader',serif; }
       .sa-landing h1, .sa-landing h2 { font-family:'Fraunces',serif; font-weight:700; margin:0; }
       .sa-landing .mono { font-family:'Courier Prime',monospace; letter-spacing:0.14em; text-transform:uppercase; }
       .sa-landing ::selection { background:${VIOLET}; color:${PAPER}; }
-      .sa-stage { perspective:1400px; }
+      .sa-stage { perspective:1200px; overflow:hidden; cursor:ns-resize; }
       .sa-ring { transform-style:preserve-3d; }
-      .sa-book { position:absolute; top:50%; left:50%; width:clamp(120px,15vw,190px); aspect-ratio:2/3; transform-style:preserve-3d; cursor:pointer; background:none; border:none; padding:0; will-change:transform; }
+      .sa-book { position:absolute; top:50%; left:50%; width:clamp(78px,9vw,128px); aspect-ratio:2/3; transform-style:preserve-3d; cursor:pointer; background:none; border:none; padding:0; will-change:transform; }
       .sa-book-face { position:absolute; inset:0; border-radius:6px; overflow:hidden; backface-visibility:hidden; box-shadow:0 20px 45px -18px rgba(0,0,0,0.75); border:1px solid rgba(217,178,92,0.35); }
       .sa-book-back { position:absolute; inset:0; border-radius:6px; backface-visibility:hidden; transform:rotateY(180deg); box-shadow:0 20px 45px -18px rgba(0,0,0,0.75); }
       .sa-book:focus-visible .sa-book-face, .sa-book:focus-visible .sa-book-back { outline: 2px solid #D9B25C; outline-offset: 2px; }
@@ -63,148 +63,147 @@ function EnterPill({ onEnter, label = "Enter the Archive" }) {
   );
 }
 
-function BookRing({ stories, containerRef, onSelectStory }) {
-  const { scrollYProgress } = useScroll({ target: containerRef, offset: ["start start", "end end"] });
-  // Smooth out raw scroll input (mouse-wheel steps, trackpad jitter) so the
-  // ring glides instead of jumping in lockstep with every scroll event.
-  const smoothProgress = useSpring(scrollYProgress, { stiffness: 90, damping: 26, mass: 0.4, restDelta: 0.0005 });
-  const introEnd = 0.08;
+// Idle-spinning book carousel. Left alone, it slowly turns on its own;
+// hovering it and scrolling the wheel takes manual control of the rotation
+// (and stops the page itself from scrolling) — move the pointer off it and
+// the wheel goes back to scrolling the page normally.
+function BookStage({ stories, onSelectStory }) {
+  const stageRef = useRef(null);
+  const rotation = useMotionValue(0);
   const n = stories.length;
-  const totalSweep = ((n - 1) / n) * 360;
+  const anglePer = 360 / n;
+  const lastInteraction = useRef(0);
+  const reducedMotion =
+    typeof window !== "undefined" && window.matchMedia
+      ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false;
 
-  const groupRotate = useTransform(smoothProgress, [0, introEnd, 1], [0, 0, -totalSweep]);
-  const heroOpacity = useTransform(smoothProgress, [0, introEnd], [1, 0]);
-  const hintOpacity = useTransform(smoothProgress, [0, introEnd * 0.6], [1, 0]);
-  const labelOpacity = useTransform(smoothProgress, [introEnd * 0.75, introEnd], [0, 1]);
-
-  const [activeIndex, setActiveIndex] = useState(-1);
-
-  useMotionValueEvent(smoothProgress, "change", (p) => {
-    if (p < introEnd) {
-      if (activeIndex !== -1) setActiveIndex(-1);
-      return;
-    }
-    const local = (p - introEnd) / (1 - introEnd);
-    const idx = Math.min(n - 1, Math.max(0, Math.floor(local * n)));
-    if (idx !== activeIndex) setActiveIndex(idx);
+  useAnimationFrame((_, delta) => {
+    if (reducedMotion) return;
+    if (Date.now() - lastInteraction.current < 900) return;
+    rotation.set(rotation.get() + delta * 0.0065);
   });
 
-  const activeStory = activeIndex >= 0 ? stories[activeIndex] : null;
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    function onWheel(e) {
+      e.preventDefault();
+      lastInteraction.current = Date.now();
+      rotation.set(rotation.get() + e.deltaY * 0.15);
+    }
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [rotation]);
+
+  const [activeIndex, setActiveIndex] = useState(0);
+  useMotionValueEvent(rotation, "change", (v) => {
+    let best = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < n; i++) {
+      let a = (i * anglePer + v) % 360;
+      if (a < 0) a += 360;
+      const dist = Math.min(a, 360 - a);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = i;
+      }
+    }
+    if (best !== activeIndex) setActiveIndex(best);
+  });
+
+  const activeStory = stories[activeIndex];
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center sa-stage">
-      <motion.div className="sa-ring relative" style={{ width: 1, height: 1, rotateY: groupRotate }}>
-        {stories.map((story, i) => {
-          const angle = i * (360 / n);
-          return (
-            <motion.button
-              key={story.id}
-              type="button"
-              className="sa-book"
-              aria-label={`Open ${story.title}`}
-              onClick={() => onSelectStory && onSelectStory(story)}
-              whileHover={{ scale: 1.08 }}
-              whileTap={{ scale: 0.95 }}
-              transformTemplate={(_, generated) => `translate(-50%,-50%) rotateY(${angle}deg) translateZ(var(--radius)) ${generated}`}
-            >
-              <div
-                className="sa-book-face"
-                style={{
-                  backgroundImage: story.coverArt ? `url(${story.coverArt})` : undefined,
-                  backgroundSize: "cover",
-                  backgroundPosition: "center",
-                  backgroundColor: story.accent,
-                }}
+    <div className="w-full">
+      <div ref={stageRef} className="sa-stage relative mx-auto" style={{ height: "min(42vh, 340px)", maxWidth: 480 }}>
+        <motion.div
+          className="sa-ring absolute"
+          style={{ top: "50%", left: "50%", width: 1, height: 1, rotateY: rotation }}
+        >
+          {stories.map((story, i) => {
+            const angle = i * anglePer;
+            return (
+              <motion.button
+                key={story.id}
+                type="button"
+                className="sa-book"
+                aria-label={`Open ${story.title}`}
+                onClick={() => onSelectStory && onSelectStory(story)}
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.95 }}
+                transformTemplate={(_, generated) => `translate(-50%,-50%) rotateY(${angle}deg) translateZ(var(--radius)) ${generated}`}
               >
                 <div
+                  className="sa-book-face"
                   style={{
-                    position: "absolute",
-                    inset: 0,
-                    background: `linear-gradient(to top, rgba(10,8,6,0.92), rgba(10,8,6,0.05) 55%)`,
+                    backgroundImage: story.coverArt ? `url(${story.coverArt})` : undefined,
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
+                    backgroundColor: story.accent,
                   }}
-                />
-                <div style={{ position: "absolute", left: 10, right: 10, bottom: 10 }}>
-                  <div className="mono" style={{ fontSize: 9, color: GOLD }}>
-                    {story.genre}
-                  </div>
-                  <div style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 13, color: PAPER, lineHeight: 1.15, marginTop: 2 }}>
-                    {story.title}
+                >
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      background: `linear-gradient(to top, rgba(10,8,6,0.92), rgba(10,8,6,0.05) 55%)`,
+                    }}
+                  />
+                  <div style={{ position: "absolute", left: 8, right: 8, bottom: 8 }}>
+                    <div className="mono" style={{ fontSize: 7, color: GOLD }}>
+                      {story.genre}
+                    </div>
+                    <div style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 11, color: PAPER, lineHeight: 1.15, marginTop: 2 }}>
+                      {story.title}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="sa-book-back" style={{ background: `linear-gradient(160deg, ${story.accent}, #171310)` }} />
-            </motion.button>
-          );
-        })}
-      </motion.div>
+                <div className="sa-book-back" style={{ background: `linear-gradient(160deg, ${story.accent}, #171310)` }} />
+              </motion.button>
+            );
+          })}
+        </motion.div>
+      </div>
 
-      <motion.div
-        style={{ opacity: heroOpacity }}
-        className="relative z-10 text-center pointer-events-none max-w-xl px-6"
-      >
-        <span className="mono text-xs" style={{ color: VIOLET }}>
-          Story Archive
-        </span>
-        <h1 className="mt-4" style={{ fontSize: "clamp(2.2rem,6vw,4.2rem)", lineHeight: 1.05, color: PAPER, textShadow: "0 4px 30px rgba(0,0,0,0.5)" }}>
-          Every story <em style={{ fontStyle: "italic", color: GOLD }}>remembers</em> you.
-        </h1>
-        <p className="mt-5" style={{ color: PAPER_DIM, fontStyle: "italic", fontSize: "clamp(1rem,1.6vw,1.15rem)" }}>
-          Pick a story, play a character, and watch a world that keeps living even when you're not looking.
-        </p>
-      </motion.div>
-
-      <motion.div
-        style={{ opacity: hintOpacity }}
-        className="absolute bottom-9 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 z-10"
-      >
-        <span className="mono text-[10px]" style={{ color: INK_SOFT }}>
-          Scroll
-        </span>
-        <motion.div
-          animate={{ opacity: [0.3, 1, 0.3] }}
-          transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
-          style={{ width: 1, height: 34, background: `linear-gradient(${PAPER_DIM}, transparent)` }}
-        />
-      </motion.div>
-
-      <AnimatePresence mode="wait">
-        {activeStory && (
+      <div className="mt-6 text-center">
+        <div className="mono text-[10px] mb-4" style={{ color: INK_SOFT }}>
+          Hover the shelf &amp; scroll to browse
+        </div>
+        <AnimatePresence mode="wait">
           <motion.div
             key={activeStory.id}
-            initial={{ opacity: 0, y: 14 }}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -14 }}
-            transition={{ duration: 0.4, ease: "easeOut" }}
-            style={{ opacity: labelOpacity }}
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center z-10 pointer-events-none px-6"
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
           >
             <div className="mono text-xs" style={{ color: activeStory.accent }}>
               {activeStory.genre}
             </div>
-            <h2 className="mt-3" style={{ fontSize: "clamp(1.7rem,4.2vw,2.9rem)", color: PAPER, textShadow: "0 4px 24px rgba(0,0,0,0.55)", lineHeight: 1.08 }}>
+            <h2 className="mt-2" style={{ fontSize: "clamp(1.2rem,2.2vw,1.7rem)", color: PAPER }}>
               {activeStory.title}
             </h2>
-            <p className="mt-3 max-w-md mx-auto" style={{ color: PAPER_DIM, fontStyle: "italic" }}>
+            <p className="mt-2 max-w-sm mx-auto" style={{ color: PAPER_DIM, fontStyle: "italic", fontSize: "0.9rem" }}>
               {activeStory.blurb}
             </p>
           </motion.div>
-        )}
-      </AnimatePresence>
-
-      <div className="absolute right-5 top-1/2 -translate-y-1/2 z-10 hidden sm:flex flex-col gap-3">
-        {stories.map((s, i) => (
-          <div
-            key={s.id}
-            style={{
-              width: 6,
-              height: 6,
-              borderRadius: "50%",
-              background: i === activeIndex ? PAPER : "rgba(237,228,212,0.25)",
-              transform: i === activeIndex ? "scale(1.4)" : "scale(1)",
-              transition: "background .3s ease, transform .3s ease",
-            }}
-          />
-        ))}
+        </AnimatePresence>
+        <div className="flex justify-center gap-2 mt-5">
+          {stories.map((s, i) => (
+            <div
+              key={s.id}
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: i === activeIndex ? PAPER : "rgba(237,228,212,0.25)",
+                transform: i === activeIndex ? "scale(1.4)" : "scale(1)",
+                transition: "background .3s ease, transform .3s ease",
+              }}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -415,18 +414,39 @@ function WorldDiagram({ stories }) {
 }
 
 export default function Landing({ stories, featuredCharacter, onEnter, onSelectStory }) {
-  const heroRef = useRef(null);
-
   return (
     <div className="sa-landing min-h-screen w-full">
       <LandingStyles />
       <EnterPill onEnter={onEnter} />
 
-      <div ref={heroRef} style={{ position: "relative", height: "360vh" }}>
-        <div style={{ position: "sticky", top: 0, height: "100vh", overflow: "hidden" }}>
-          <BookRing stories={stories} containerRef={heroRef} onSelectStory={onSelectStory} />
+      <section className="px-6 sm:px-10 lg:px-16" style={{ minHeight: "100vh", display: "flex", alignItems: "center", paddingTop: 96, paddingBottom: 64 }}>
+        <div className="w-full mx-auto max-w-6xl flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
+          <div style={{ flex: "1 1 380px", maxWidth: 480, textAlign: "left" }}>
+            <span className="mono text-xs" style={{ color: VIOLET }}>
+              Story Archive
+            </span>
+            <h1 className="mt-4" style={{ fontSize: "clamp(2.2rem,5vw,3.6rem)", lineHeight: 1.05, color: PAPER }}>
+              Every story <em style={{ fontStyle: "italic", color: GOLD }}>remembers</em> you.
+            </h1>
+            <p className="mt-5" style={{ color: PAPER_DIM, fontStyle: "italic", fontSize: "1.05rem" }}>
+              Pick a story, play a character, and watch a world that keeps living even when you're not looking.
+            </p>
+            <motion.button
+              onClick={onEnter}
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.97 }}
+              className="mono text-xs inline-flex items-center gap-2 mt-8 px-6 py-3 rounded-sm"
+              style={{ background: PAPER, color: INK, border: "1px solid rgba(0,0,0,0.15)" }}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#8B3A3A" }} />
+              Start Reading
+            </motion.button>
+          </div>
+          <div style={{ flex: "1 1 380px", minWidth: 0, width: "100%" }}>
+            <BookStage stories={stories} onSelectStory={onSelectStory} />
+          </div>
         </div>
-      </div>
+      </section>
 
       <section className="py-24 sm:py-36 px-6" style={{ background: NIGHT }}>
         <div className="max-w-5xl mx-auto">
