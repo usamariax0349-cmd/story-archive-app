@@ -105,7 +105,7 @@ function BookRing({ stories, containerRef, onSelectStory }) {
               onClick={() => onSelectStory && onSelectStory(story)}
               whileHover={{ scale: 1.08 }}
               whileTap={{ scale: 0.95 }}
-              style={{ transform: `translate(-50%,-50%) rotateY(${angle}deg) translateZ(var(--radius))` }}
+              transformTemplate={(_, generated) => `translate(-50%,-50%) rotateY(${angle}deg) translateZ(var(--radius)) ${generated}`}
             >
               <div
                 className="sa-book-face"
@@ -521,12 +521,12 @@ export default function Landing({ stories, featuredCharacter, onEnter, onSelectS
                 variants={{ hidden: { opacity: 0, y: 40 }, show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: "easeOut" } } }}
                 whileHover={{ y: -22, scale: 1.06, zIndex: 20, transition: { duration: 0.25 } }}
                 whileTap={{ scale: 0.98 }}
+                transformTemplate={(_, generated) => `rotate(${offset * 6}deg) ${generated}`}
                 style={{
                   width: cardWidth,
                   height: 192,
                   marginLeft: -cardWidth / 2 + offset * spacing,
                   transformOrigin: "bottom center",
-                  transform: `rotate(${offset * 6}deg)`,
                   background: s.coverArt ? undefined : `linear-gradient(160deg, ${s.accent}, #171310)`,
                   backgroundImage: s.coverArt ? `url(${s.coverArt})` : undefined,
                   backgroundSize: "cover",
