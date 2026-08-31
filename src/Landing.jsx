@@ -23,18 +23,35 @@ const FADE_UP = {
   show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] } },
 };
 
+// Coarse pointer (touch) vs fine pointer (mouse) — used to swap
+// hover-dependent interactions for touch-friendly equivalents, since
+// touch has no real hover state and can leave elements visually "stuck"
+// mid-hover after a tap.
+function useIsTouchDevice() {
+  const [isTouch, setIsTouch] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(pointer: coarse)");
+    setIsTouch(mq.matches);
+    const handler = (e) => setIsTouch(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return isTouch;
+}
+
 function LandingStyles() {
   return (
     <style>{`
       @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Newsreader:ital,wght@0,400;0,500;1,400;1,500&family=Courier+Prime:wght@400;700&display=swap');
-      .sa-landing { --radius: clamp(110px, 15vw, 220px); background:${NIGHT}; color:${PAPER}; font-family:'Newsreader',serif; }
+      .sa-landing { --radius: clamp(120px, 16vw, 240px); background:${NIGHT}; color:${PAPER}; font-family:'Newsreader',serif; }
       .sa-landing h1, .sa-landing h2 { font-family:'Fraunces',serif; font-weight:700; margin:0; }
       .sa-landing .mono { font-family:'Courier Prime',monospace; letter-spacing:0.14em; text-transform:uppercase; }
       .sa-landing ::selection { background:${VIOLET}; color:${PAPER}; }
       .sa-hero { min-height:100vh; display:flex; align-items:center; padding-top:96px; padding-bottom:64px; }
-      .sa-stage { perspective:1200px; overflow:hidden; cursor:ns-resize; }
+      .sa-stage { perspective:1200px; overflow:hidden; cursor:ns-resize; touch-action:pan-y; }
       .sa-ring { transform-style:preserve-3d; }
-      .sa-book { position:absolute; top:50%; left:50%; width:clamp(90px,12vw,150px); aspect-ratio:2/3; transform-style:preserve-3d; cursor:pointer; background:none; border:none; padding:0; will-change:transform; }
+      .sa-book { position:absolute; top:50%; left:50%; width:clamp(95px,12vw,160px); aspect-ratio:2/3; transform-style:preserve-3d; cursor:pointer; background:none; border:none; padding:0; will-change:transform; }
       .sa-book-face { position:absolute; inset:0; border-radius:6px; overflow:hidden; backface-visibility:hidden; box-shadow:0 20px 45px -18px rgba(0,0,0,0.75); border:1px solid rgba(217,178,92,0.35); }
       .sa-book-back { position:absolute; inset:0; border-radius:6px; backface-visibility:hidden; transform:rotateY(180deg); box-shadow:0 20px 45px -18px rgba(0,0,0,0.75); }
       .sa-book:focus-visible .sa-book-face, .sa-book:focus-visible .sa-book-back { outline: 2px solid #D9B25C; outline-offset: 2px; }
@@ -77,6 +94,7 @@ function BookStage({ stories, onSelectStory }) {
   const n = stories.length;
   const anglePer = 360 / n;
   const lastInteraction = useRef(0);
+  const isTouch = useIsTouchDevice();
   const reducedMotion =
     typeof window !== "undefined" && window.matchMedia
       ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -88,16 +106,79 @@ function BookStage({ stories, onSelectStory }) {
     rotation.set(rotation.get() + delta * 0.0065);
   });
 
+  // Desktop: hovering the stage and scrolling the wheel rotates it (and
+  // stops the page from scrolling). Touch: a left/right swipe rotates it,
+  // while an up/down swipe is left alone so the page still scrolls
+  // normally — the gesture's dominant axis decides which one it is.
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
+
     function onWheel(e) {
       e.preventDefault();
       lastInteraction.current = Date.now();
       rotation.set(rotation.get() + e.deltaY * 0.15);
     }
+
+    let startX = 0;
+    let startY = 0;
+    let lastX = 0;
+    let gesture = null; // "horizontal" | "vertical" | null (undecided)
+    let didDrag = false; // true once a swipe has genuinely rotated the ring
+
+    function onTouchStart(e) {
+      const t = e.touches[0];
+      startX = lastX = t.clientX;
+      startY = t.clientY;
+      gesture = null;
+    }
+    function onTouchMove(e) {
+      const t = e.touches[0];
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+      if (gesture === null) {
+        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+        gesture = Math.abs(dx) > Math.abs(dy) ? "horizontal" : "vertical";
+      }
+      if (gesture === "horizontal") {
+        e.preventDefault();
+        didDrag = true;
+        lastInteraction.current = Date.now();
+        rotation.set(rotation.get() + (t.clientX - lastX) * 0.6);
+        lastX = t.clientX;
+      }
+      // vertical gesture: leave untouched, the page scrolls normally
+    }
+    // A swipe that ends on top of a book would otherwise also fire that
+    // book's click a moment later (the browser's usual tap-to-click
+    // synthesis) and navigate away unintentionally — swallow that one click.
+    function onTouchEnd() {
+      if (!didDrag) return;
+      window.setTimeout(() => {
+        didDrag = false;
+      }, 400);
+    }
+    function onClickCapture(e) {
+      if (didDrag) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }
+
     el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd, { passive: true });
+    el.addEventListener("touchcancel", onTouchEnd, { passive: true });
+    el.addEventListener("click", onClickCapture, true);
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchEnd);
+      el.removeEventListener("click", onClickCapture, true);
+    };
   }, [rotation]);
 
   const [activeIndex, setActiveIndex] = useState(0);
@@ -120,7 +201,7 @@ function BookStage({ stories, onSelectStory }) {
 
   return (
     <div className="w-full">
-      <div ref={stageRef} className="sa-stage relative mx-auto" style={{ height: "min(52vh, 440px)", maxWidth: 620 }}>
+      <div ref={stageRef} className="sa-stage relative mx-auto" style={{ height: "min(56vh, 480px)", maxWidth: 680 }}>
         <motion.div
           className="sa-ring absolute"
           style={{ top: "50%", left: "50%", width: 1, height: 1, rotateY: rotation }}
@@ -134,7 +215,7 @@ function BookStage({ stories, onSelectStory }) {
                 className="sa-book"
                 aria-label={`Open ${story.title}`}
                 onClick={() => onSelectStory && onSelectStory(story)}
-                whileHover={{ scale: 1.08 }}
+                whileHover={isTouch ? undefined : { scale: 1.08 }}
                 whileTap={{ scale: 0.95 }}
                 transformTemplate={(_, generated) => `translate(-50%,-50%) rotateY(${angle}deg) translateZ(var(--radius)) ${generated}`}
               >
@@ -172,7 +253,7 @@ function BookStage({ stories, onSelectStory }) {
 
       <div className="mt-6 text-center">
         <div className="mono text-[10px] mb-4" style={{ color: INK_SOFT }}>
-          Hover the shelf &amp; scroll to browse
+          {isTouch ? "Swipe the shelf to browse" : "Hover the shelf & scroll to browse"}
         </div>
         <AnimatePresence mode="wait">
           <motion.div
@@ -417,6 +498,7 @@ function WorldDiagram({ stories }) {
 }
 
 export default function Landing({ stories, featuredCharacter, onEnter, onSelectStory }) {
+  const isTouch = useIsTouchDevice();
   return (
     <div className="sa-landing min-h-screen w-full">
       <LandingStyles />
@@ -527,15 +609,15 @@ export default function Landing({ stories, featuredCharacter, onEnter, onSelectS
           whileInView="show"
           viewport={{ once: true, amount: 0.5 }}
           className="relative mx-auto mb-16"
-          style={{ width: "min(92vw, 620px)", height: 260 }}
+          style={{ width: "min(92vw, 700px)", height: 300 }}
         >
           {stories.map((s, i) => {
             const n = stories.length;
             const offset = i - (n - 1) / 2;
             // Responsive card size/spacing (capped on desktop, shrinking on
             // narrow viewports) so the fan can never overflow the screen.
-            const cardWidthCss = "min(148px, 24vw)";
-            const spacingCss = "min(58px, 9vw)";
+            const cardWidthCss = "min(176px, 24vw)";
+            const spacingCss = "min(68px, 9vw)";
             return (
               <motion.button
                 key={s.id}
@@ -544,7 +626,7 @@ export default function Landing({ stories, featuredCharacter, onEnter, onSelectS
                 aria-label={`Open ${s.title}`}
                 onClick={() => onSelectStory && onSelectStory(s)}
                 variants={{ hidden: { opacity: 0, y: 40 }, show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: "easeOut" } } }}
-                whileHover={{ y: -22, scale: 1.06, zIndex: 20, transition: { duration: 0.25 } }}
+                whileHover={isTouch ? undefined : { y: -22, scale: 1.06, zIndex: 20, transition: { duration: 0.25 } }}
                 whileTap={{ scale: 0.98 }}
                 transformTemplate={(_, generated) => `rotate(${offset * 6}deg) ${generated}`}
                 style={{
@@ -562,7 +644,7 @@ export default function Landing({ stories, featuredCharacter, onEnter, onSelectS
                 }}
               >
                 <div
-                  className="absolute inset-0 opacity-70 group-hover:opacity-100 group-focus-visible:opacity-100"
+                  className={`absolute inset-0 ${isTouch ? "opacity-100" : "opacity-70 group-hover:opacity-100 group-focus-visible:opacity-100"}`}
                   style={{
                     transition: "opacity .2s ease",
                     background: "linear-gradient(to top, rgba(10,8,6,0.92), rgba(10,8,6,0.08) 60%)",
