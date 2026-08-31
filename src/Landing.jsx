@@ -40,6 +40,22 @@ function useIsTouchDevice() {
   return isTouch;
 }
 
+// True for phone-width viewports — used to swap the desktop card fan for a
+// single large swipeable card, since a multi-card fan doesn't have room to
+// be "big" on a narrow screen the way a phone-native carousel does.
+function useIsMobileViewport() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(max-width: 767px)");
+    setIsMobile(mq.matches);
+    const handler = (e) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return isMobile;
+}
+
 function LandingStyles() {
   return (
     <style>{`
@@ -57,6 +73,9 @@ function LandingStyles() {
       .sa-book:focus-visible .sa-book-face, .sa-book:focus-visible .sa-book-back { outline: 2px solid #D9B25C; outline-offset: 2px; }
       .sa-stack-card { cursor:pointer; background:none; border:none; padding:0; text-align:left; will-change:transform; }
       .sa-stack-card:focus-visible { outline: 2px solid #D9B25C; outline-offset: 4px; border-radius: 6px; }
+      .sa-mobile-stack-card { cursor:grab; background:none; padding:0; text-align:left; will-change:transform; }
+      .sa-mobile-stack-card:active { cursor:grabbing; }
+      .sa-mobile-stack-card:focus-visible { outline: 2px solid #D9B25C; outline-offset: 4px; }
       @media (max-width: 1023px) {
         .sa-hero { min-height:auto; align-items:flex-start; padding-top:88px; padding-bottom:40px; }
       }
@@ -439,6 +458,127 @@ function ChoicesDiagram() {
   );
 }
 
+const SWIPE_OFFSET_THRESHOLD = 80;
+const SWIPE_CONFIDENCE_THRESHOLD = 8000;
+function swipePower(offset, velocity) {
+  return Math.abs(offset) * Math.abs(velocity);
+}
+
+const cardSlideVariants = {
+  enter: (dir) => ({ x: dir > 0 ? 80 : -80, opacity: 0, scale: 0.94 }),
+  center: { x: 0, opacity: 1, scale: 1 },
+  exit: (dir) => ({ x: dir < 0 ? 80 : -80, opacity: 0, scale: 0.94 }),
+};
+
+// Phone version of the closing "stack": one large, edge-to-edge card at a
+// time instead of the desktop fan, since there isn't room to lay 7 cards
+// out side by side and still have any of them be big. A left/right drag
+// pages to the next/previous story, wrapping around at either end.
+function MobileStackCarousel({ stories, onSelectStory }) {
+  const n = stories.length;
+  const wrap = (i) => ((i % n) + n) % n;
+  const [[page, direction], setPage] = useState([0, 0]);
+  const index = wrap(page);
+  const story = stories[index];
+  // Framer's onTap doesn't reliably suppress itself after a drag gesture on
+  // this element (the constrained x snaps back to 0, which can read as "no
+  // real movement" to the tap recognizer) — track it ourselves so a swipe
+  // doesn't also open whichever story the finger happened to land on.
+  const draggingRef = useRef(false);
+
+  function paginate(dir) {
+    setPage([page + dir, dir]);
+  }
+
+  return (
+    <div>
+      <div
+        className="relative mx-auto"
+        style={{ width: "min(92vw, 460px)", aspectRatio: "2/3", overflow: "hidden", borderRadius: 12 }}
+      >
+        <AnimatePresence initial={false} custom={direction}>
+          <motion.button
+            key={story.id}
+            type="button"
+            aria-label={`Open ${story.title}`}
+            custom={direction}
+            variants={cardSlideVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ x: { type: "spring", stiffness: 320, damping: 32 }, opacity: { duration: 0.2 }, scale: { duration: 0.2 } }}
+            drag="x"
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.8}
+            onDragStart={() => {
+              draggingRef.current = true;
+            }}
+            onDragEnd={(e, { offset, velocity }) => {
+              const swipe = swipePower(offset.x, velocity.x);
+              if (offset.x < -SWIPE_OFFSET_THRESHOLD || (offset.x < 0 && swipe > SWIPE_CONFIDENCE_THRESHOLD)) paginate(1);
+              else if (offset.x > SWIPE_OFFSET_THRESHOLD || (offset.x > 0 && swipe > SWIPE_CONFIDENCE_THRESHOLD)) paginate(-1);
+              window.setTimeout(() => {
+                draggingRef.current = false;
+              }, 200);
+            }}
+            onTap={() => {
+              if (draggingRef.current) return;
+              onSelectStory && onSelectStory(story);
+            }}
+            className="sa-mobile-stack-card absolute inset-0 rounded-xl overflow-hidden"
+            style={{
+              background: story.coverArt ? undefined : `linear-gradient(160deg, ${story.accent}, #171310)`,
+              backgroundImage: story.coverArt ? `url(${story.coverArt})` : undefined,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              border: "1px solid rgba(255,255,255,0.12)",
+              boxShadow: "0 25px 60px -20px rgba(0,0,0,0.75)",
+              touchAction: "pan-y",
+            }}
+          >
+            <div
+              className="absolute inset-0"
+              style={{ background: "linear-gradient(to top, rgba(10,8,6,0.92), rgba(10,8,6,0.05) 55%)" }}
+            />
+            <div className="absolute left-4 right-4 bottom-4 text-left">
+              <div className="mono text-xs" style={{ color: GOLD }}>
+                {story.genre}
+              </div>
+              <div style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: "1.3rem", color: PAPER, marginTop: 4, lineHeight: 1.15 }}>
+                {story.title}
+              </div>
+            </div>
+          </motion.button>
+        </AnimatePresence>
+      </div>
+
+      <div className="mono text-[10px] mt-4 text-center" style={{ color: INK_SOFT }}>
+        Swipe to browse
+      </div>
+      <div className="flex justify-center gap-2 mt-3">
+        {stories.map((s, i) => (
+          <button
+            key={s.id}
+            type="button"
+            aria-label={`Go to ${s.title}`}
+            onClick={() => setPage([i, i > index ? 1 : -1])}
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              padding: 0,
+              border: "none",
+              background: i === index ? PAPER : "rgba(237,228,212,0.25)",
+              transform: i === index ? "scale(1.4)" : "scale(1)",
+              transition: "background .3s ease, transform .3s ease",
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function WorldDiagram({ stories }) {
   const ref = useRef(null);
   const rows = stories.slice(0, 5);
@@ -499,6 +639,7 @@ function WorldDiagram({ stories }) {
 
 export default function Landing({ stories, featuredCharacter, onEnter, onSelectStory }) {
   const isTouch = useIsTouchDevice();
+  const isMobile = useIsMobileViewport();
   return (
     <div className="sa-landing min-h-screen w-full">
       <LandingStyles />
@@ -603,65 +744,71 @@ export default function Landing({ stories, featuredCharacter, onEnter, onSelectS
       </section>
 
       <section className="py-32 sm:py-44 px-6 text-center" style={{ background: NIGHT }}>
-        <motion.div
-          variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06 } } }}
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, amount: 0.5 }}
-          className="relative mx-auto mb-16"
-          style={{ width: "min(92vw, 700px)", height: 300 }}
-        >
-          {stories.map((s, i) => {
-            const n = stories.length;
-            const offset = i - (n - 1) / 2;
-            // Responsive card size/spacing (capped on desktop, shrinking on
-            // narrow viewports) so the fan can never overflow the screen.
-            const cardWidthCss = "min(176px, 24vw)";
-            const spacingCss = "min(68px, 9vw)";
-            return (
-              <motion.button
-                key={s.id}
-                type="button"
-                className="sa-stack-card absolute top-0 left-1/2 rounded overflow-hidden group"
-                aria-label={`Open ${s.title}`}
-                onClick={() => onSelectStory && onSelectStory(s)}
-                variants={{ hidden: { opacity: 0, y: 40 }, show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: "easeOut" } } }}
-                whileHover={isTouch ? undefined : { y: -22, scale: 1.06, zIndex: 20, transition: { duration: 0.25 } }}
-                whileTap={{ scale: 0.98 }}
-                transformTemplate={(_, generated) => `rotate(${offset * 6}deg) ${generated}`}
-                style={{
-                  width: cardWidthCss,
-                  aspectRatio: "2/3",
-                  marginLeft: `calc(${cardWidthCss} / -2 + ${offset} * ${spacingCss})`,
-                  transformOrigin: "bottom center",
-                  background: s.coverArt ? undefined : `linear-gradient(160deg, ${s.accent}, #171310)`,
-                  backgroundImage: s.coverArt ? `url(${s.coverArt})` : undefined,
-                  backgroundSize: "cover",
-                  backgroundPosition: "center",
-                  zIndex: i,
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  boxShadow: "0 20px 50px -20px rgba(0,0,0,0.7)",
-                }}
-              >
-                <div
-                  className={`absolute inset-0 ${isTouch ? "opacity-100" : "opacity-70 group-hover:opacity-100 group-focus-visible:opacity-100"}`}
+        {isMobile ? (
+          <div className="mb-16">
+            <MobileStackCarousel stories={stories} onSelectStory={onSelectStory} />
+          </div>
+        ) : (
+          <motion.div
+            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06 } } }}
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, amount: 0.5 }}
+            className="relative mx-auto mb-16"
+            style={{ width: "min(92vw, 700px)", height: 300 }}
+          >
+            {stories.map((s, i) => {
+              const n = stories.length;
+              const offset = i - (n - 1) / 2;
+              // Responsive card size/spacing (capped on desktop, shrinking on
+              // narrow viewports) so the fan can never overflow the screen.
+              const cardWidthCss = "min(176px, 24vw)";
+              const spacingCss = "min(68px, 9vw)";
+              return (
+                <motion.button
+                  key={s.id}
+                  type="button"
+                  className="sa-stack-card absolute top-0 left-1/2 rounded overflow-hidden group"
+                  aria-label={`Open ${s.title}`}
+                  onClick={() => onSelectStory && onSelectStory(s)}
+                  variants={{ hidden: { opacity: 0, y: 40 }, show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: "easeOut" } } }}
+                  whileHover={isTouch ? undefined : { y: -22, scale: 1.06, zIndex: 20, transition: { duration: 0.25 } }}
+                  whileTap={{ scale: 0.98 }}
+                  transformTemplate={(_, generated) => `rotate(${offset * 6}deg) ${generated}`}
                   style={{
-                    transition: "opacity .2s ease",
-                    background: "linear-gradient(to top, rgba(10,8,6,0.92), rgba(10,8,6,0.08) 60%)",
+                    width: cardWidthCss,
+                    aspectRatio: "2/3",
+                    marginLeft: `calc(${cardWidthCss} / -2 + ${offset} * ${spacingCss})`,
+                    transformOrigin: "bottom center",
+                    background: s.coverArt ? undefined : `linear-gradient(160deg, ${s.accent}, #171310)`,
+                    backgroundImage: s.coverArt ? `url(${s.coverArt})` : undefined,
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
+                    zIndex: i,
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    boxShadow: "0 20px 50px -20px rgba(0,0,0,0.7)",
                   }}
-                />
-                <div className="absolute left-2 right-2 bottom-2 text-left">
-                  <div className="mono" style={{ fontSize: 8, color: GOLD }}>
-                    {s.genre}
+                >
+                  <div
+                    className={`absolute inset-0 ${isTouch ? "opacity-100" : "opacity-70 group-hover:opacity-100 group-focus-visible:opacity-100"}`}
+                    style={{
+                      transition: "opacity .2s ease",
+                      background: "linear-gradient(to top, rgba(10,8,6,0.92), rgba(10,8,6,0.08) 60%)",
+                    }}
+                  />
+                  <div className="absolute left-2 right-2 bottom-2 text-left">
+                    <div className="mono" style={{ fontSize: 8, color: GOLD }}>
+                      {s.genre}
+                    </div>
+                    <div style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 11.5, color: PAPER, lineHeight: 1.15, marginTop: 2 }}>
+                      {s.title}
+                    </div>
                   </div>
-                  <div style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 11.5, color: PAPER, lineHeight: 1.15, marginTop: 2 }}>
-                    {s.title}
-                  </div>
-                </div>
-              </motion.button>
-            );
-          })}
-        </motion.div>
+                </motion.button>
+              );
+            })}
+          </motion.div>
+        )}
         <motion.h2 variants={FADE_UP} initial="hidden" whileInView="show" viewport={{ once: true }} style={{ fontSize: "clamp(2rem,5vw,3rem)", color: PAPER }}>
           Begin your story.
         </motion.h2>
